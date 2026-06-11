@@ -15,11 +15,11 @@
 - [x] Stack decision: Three.js + Capacitor (Unity not available/testable in dev env), procedural art, OSM maps, local-first services
 - [x] Overpass API verified reachable (needs User-Agent header)
 
-## M0 — Scaffold
-- [ ] npm project: Vite + TS strict + Three.js + vitest + Playwright + Capacitor deps
-- [ ] Core: GameLoop (fixed 30 Hz sim + interpolated render), EventBus (typed), Rng (seeded streams), StateMachine, SaveSystem (versioned migrations)
-- [ ] Debug overlay (FPS, tick time, draw calls); render smoke scene
-- [ ] Playwright smoke test + vitest setup; `npm test` green
+## M0 — Scaffold ✅
+- [x] npm project: Vite + TS strict + Three.js + vitest + Playwright + Capacitor deps
+- [x] Core: GameLoop (fixed 30 Hz sim + interpolated render), EventBus (typed), Rng (seeded streams + snapshot/restore), StateMachine, SaveSystem (versioned migrations)
+- [x] Debug overlay (FPS/tick/draws, `?debug=1` or backtick) + `window.__cakewalk` test hook; flat-shaded smoke scene renders
+- [x] 16 vitest tests + Playwright smoke (system Chrome channel — bundled Chromium unsupported on this OS) all green
 
 ## M1 — Graybox Run (fun gate)
 - [ ] 500 m graybox corridor, chase cam
@@ -86,3 +86,4 @@
 - **2026-06-11**: Project started. idea.md + steps.md written; reviewer pass 1 applied (Rev 2).
 - **2026-06-12 (a)**: User feature batch applied (Rev 3): Eid-ul-Adha exodus storyline, pocketmar tell/Stare-Down minigame, Sand Watch animation, 5-star rating, street life. Reviewer delta-pass applied (7 fixes).
 - **2026-06-12 (b)**: User locked everything: all §11 decisions (Mohammadpur high-pocketmar OK, Sand Watch in MVP, generous energy), ALL features in MVP, build the full game now. Stack chosen with user: Three.js + Capacitor + procedural art + real OSM + local-first services. idea.md reconciled to Rev 4 (restored Rev 3 content lost to stale editor buffer, kept user's Dhanmondi 2→32 + head-load/full-duck additions, updated §8 to final stack). steps.md restructured to build milestones M0–M9. Implementation plan approved; starting M0.
+- **2026-06-12 (c)**: M0 done — project scaffold, core architecture (GameLoop 30 Hz fixed-step, typed EventBus, seeded Rng streams w/ snapshot, StateMachine, versioned SaveSystem, DebugOverlay + test hook). Typecheck + 16 unit tests + e2e smoke (screenshot verified) green. Note: Playwright must use `channel: 'chrome'` on this machine.
