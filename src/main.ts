@@ -1,21 +1,15 @@
 /**
  * Bootstrap: renderer, game loop, state machine, debug overlay, test hook.
  */
-import {
-  Color,
-  DirectionalLight,
-  HemisphereLight,
-  Mesh,
-  MeshLambertMaterial,
-  PerspectiveCamera,
-  Scene,
-  IcosahedronGeometry,
-  WebGLRenderer,
-} from 'three';
-import { GameLoop } from '@/core/GameLoop';
-import { StateMachine, type GameState } from '@/core/StateMachine';
+import { PerspectiveCamera, WebGLRenderer } from 'three';
+import { GameLoop, SIM_DT } from '@/core/GameLoop';
+import { StateMachine } from '@/core/StateMachine';
 import { DebugOverlay } from '@/core/DebugOverlay';
 import { SaveSystem } from '@/core/SaveSystem';
+import { InputSystem } from '@/player/Input';
+import type { GameContext } from '@/core/GameContext';
+import { RunState } from '@/states/RunState';
+import { ResultsState } from '@/states/ResultsState';
 
 const app = document.getElementById('app')!;
 const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -30,84 +24,59 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-const debug = new DebugOverlay(renderer);
-const save = new SaveSystem();
-const machine = new StateMachine();
+const ctx: GameContext = {
+  renderer,
+  camera,
+  machine: new StateMachine(),
+  save: new SaveSystem(),
+  debug: new DebugOverlay(renderer),
+  input: new InputSystem(app),
+  testApi: {},
+};
 
-/** M0 smoke state: spinning flat-shaded icosahedron over Dhaka-dusk sky. */
-class BootState implements GameState {
-  private scene = new Scene();
-  private mesh: Mesh;
-  private t = 0;
-
-  constructor() {
-    this.scene.background = new Color('#2a1f14');
-    this.scene.add(new HemisphereLight(0xfff0d0, 0x403020, 1.0));
-    const sun = new DirectionalLight(0xffe0b0, 1.2);
-    sun.position.set(3, 5, 2);
-    this.scene.add(sun);
-    this.mesh = new Mesh(
-      new IcosahedronGeometry(1, 0),
-      new MeshLambertMaterial({ color: '#e8a33d', flatShading: true }),
-    );
-    this.scene.add(this.mesh);
-    camera.position.set(0, 0.5, 3.2);
-    camera.lookAt(0, 0, 0);
-  }
-
-  enter(): void {}
-  exit(): void {}
-
-  fixedUpdate(dt: number): void {
-    this.t += dt;
-  }
-
-  render(alpha: number, _frameDt: number): void {
-    const t = this.t + alpha * (1 / 30);
-    this.mesh.rotation.set(t * 0.4, t * 0.7, 0);
-    renderer.render(this.scene, camera);
-  }
-}
-
-machine.register('boot', new BootState());
+ctx.machine.register('run', new RunState(ctx));
+ctx.machine.register('results', new ResultsState(ctx));
 
 const loop = new GameLoop({
   fixedUpdate(dt) {
     const t0 = performance.now();
-    machine.fixedUpdate(dt);
-    debug.simMs = performance.now() - t0;
+    ctx.machine.fixedUpdate(dt);
+    ctx.debug.simMs = performance.now() - t0;
   },
   render(alpha, frameDt) {
-    machine.render(alpha, frameDt);
-    debug.frame(performance.now());
+    ctx.machine.render(alpha, frameDt);
+    ctx.debug.frame(performance.now());
   },
 });
 
-/** Playwright/dev hook: deterministic state inspection & tick stepping. */
+/** Playwright/dev hook: deterministic input injection & tick stepping. */
 declare global {
   interface Window {
     __cakewalk: {
-      machine: StateMachine;
+      ctx: GameContext;
       loop: GameLoop;
-      renderer: WebGLRenderer;
       ready: boolean;
       step(ticks: number): void;
+      inject(partial: Record<string, unknown>): void;
     };
   }
 }
 window.__cakewalk = {
-  machine,
+  ctx,
   loop,
-  renderer,
   ready: false,
   step(ticks: number) {
-    for (let i = 0; i < ticks; i++) machine.fixedUpdate(1 / 30);
+    for (let i = 0; i < ticks; i++) ctx.machine.fixedUpdate(SIM_DT);
+  },
+  inject(partial: Record<string, unknown>) {
+    ctx.input.injected = partial;
   },
 };
 
 void (async () => {
-  await save.load();
-  machine.transition('boot');
+  await ctx.save.load();
+  const seed = Number(new URLSearchParams(location.search).get('seed') ?? 1);
+  ctx.machine.transition('run', { seed });
   loop.start();
   window.__cakewalk.ready = true;
 })();

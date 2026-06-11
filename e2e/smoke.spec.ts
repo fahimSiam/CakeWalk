@@ -1,23 +1,51 @@
 import { expect, test } from '@playwright/test';
 
-test('boots without console errors and renders frames', async ({ page }) => {
+test('boots into a run without console errors and renders frames', async ({ page }) => {
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/?debug=1');
+  await page.goto('/?debug=1&seed=7');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);
 
-  // Let it render a bit, then confirm the renderer is actually drawing.
   await page.waitForTimeout(500);
-  const calls = await page.evaluate(() => window.__cakewalk.renderer.info.render.calls);
+  const calls = await page.evaluate(() => window.__cakewalk.ctx.renderer.info.render.calls);
   expect(calls).toBeGreaterThan(0);
 
-  const state = await page.evaluate(() => window.__cakewalk.machine.activeName);
-  expect(state).toBe('boot');
+  const state = await page.evaluate(() => window.__cakewalk.ctx.machine.activeName);
+  expect(state).toBe('run');
   expect(errors).toEqual([]);
 
-  await page.screenshot({ path: 'e2e/screenshots/boot.png' });
+  await page.screenshot({ path: 'e2e/screenshots/run.png' });
+});
+
+test('player advances and earns taka with injected sprint input', async ({ page }) => {
+  await page.goto('/?seed=7');
+  await page.waitForFunction(() => window.__cakewalk?.ready === true);
+  // Freeze real-time sim, then step deterministically with sprint held.
+  await page.evaluate(() => {
+    window.__cakewalk.loop.timeScale = 0;
+  });
+  const before = await page.evaluate(() => {
+    const run = window.__cakewalk.ctx.testApi.run as { player: { s: number } };
+    return run.player.s;
+  });
+  await page.evaluate(() => {
+    for (let i = 0; i < 150; i++) {
+      window.__cakewalk.inject({ speed: 1 });
+      window.__cakewalk.step(1);
+    }
+  });
+  const after = await page.evaluate(() => {
+    const run = window.__cakewalk.ctx.testApi.run as {
+      player: { s: number; stamina: number };
+      score: { taka: number };
+    };
+    return { s: run.player.s, taka: run.score.taka, stamina: run.player.stamina };
+  });
+  expect(after.s).toBeGreaterThan(before + 15); // sprinted ~5s
+  expect(after.taka).toBeGreaterThan(0);
+  expect(after.stamina).toBeLessThan(100); // jogging drains stamina
 });

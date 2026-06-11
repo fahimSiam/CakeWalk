@@ -21,13 +21,14 @@
 - [x] Debug overlay (FPS/tick/draws, `?debug=1` or backtick) + `window.__cakewalk` test hook; flat-shaded smoke scene renders
 - [x] 16 vitest tests + Playwright smoke (system Chrome channel — bundled Chromium unsupported on this OS) all green
 
-## M1 — Graybox Run (fun gate)
-- [ ] 500 m graybox corridor, chase cam
-- [ ] Input: keyboard (A/D, W, S, Space, Q/E, Q+E duck, F stare, M phone) + touch per idea.md §2.1
-- [ ] Player: analog drift, variable speed, jump, shoulder dips + full duck, health, stamina
-- [ ] Crowd v1: 150+ SoA agents toward player, flow-direction param, archetypes (incl. head-load carriers), vertical collision bands, bump damage
-- [ ] Near-miss combo + Cakewalk meter + taka scoring
-- [ ] 🎯 Gate: graybox run must be FUN
+## M1 — Graybox Run (fun gate) ✅
+- [x] 500 m graybox corridor (Corridor interface: sim runs in s/t path coords; M3 swaps in OSM spline), chase cam, results screen + free retry
+- [x] Input: keyboard (A/D, W, S, Space, Q/E, Q+E duck, F stare, M phone, R sand watch, G sit) + touch (left-drag drift, right hold sprint/drag-down shuffle/tap jump/flick dips, HUD 👀+🗺 buttons)
+- [x] Player: analog drift, 3 speed tiers w/ smooth accel, jump arc, dips + full duck (pose-based hitbox + band clearing), health w/ bump cooldown, stamina w/ exhaustion lock + rest recovery; snapshot/restore ready
+- [x] Crowd v1: SoA pool (220 cap), flow-direction param, 8 archetypes (uncle/commuters/delivery/hawker/head-load HIGH-band/luggage/phone-stopper), spatial-hash separation, panic system (bark ripple ready), bump bands, despawn/respawn; snapshot/restore + determinism tests
+- [x] Near-miss combo (once per agent) + Cakewalk meter (fill → 8 s 2x) + taka (distance + near-miss, multiplier)
+- [x] 34 unit tests + 2 e2e tests green; screenshot verified; sim 0.1 ms/tick @ 120 agents
+- [~] 🎯 Fun gate: NEEDS USER PLAYTEST — `npm run dev` then keyboard play
 
 ## M2 — Procedural Art
 - [ ] gfx/meshFactory: low-poly flat-shaded people (limbId attribute, palette variants), player, props
