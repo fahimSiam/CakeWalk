@@ -30,10 +30,11 @@
 - [x] 34 unit tests + 2 e2e tests green; screenshot verified; sim 0.1 ms/tick @ 120 agents
 - [~] 🎯 Fun gate: NEEDS USER PLAYTEST — `npm run dev` then keyboard play
 
-## M2 — Procedural Art
-- [ ] gfx/meshFactory: low-poly flat-shaded people (limbId attribute, palette variants), player, props
-- [ ] Shader-injected walk cycle on InstancedMesh (per-instance phase/speed/variant)
-- [ ] Blob shadows, ground/footpath materials, sky/fog
+## M2 — Procedural Art ✅
+- [x] gfx/meshFactory: low-poly person (~180 tris, limbId + tint attrs, clothes take instanceColor, skin/hair/pants fixed), head-load sack, basket, luggage props
+- [x] Shader walk cycle injected into MeshLambertMaterial (limb shear around hip/shoulder pivots + torso bob; instanced aPhase/aSwing attrs, player uses uniforms; panic = bigger swing). NOTE: three's vColor is vec4 now — custom color_vertex chunk handles it
+- [x] PlayerAvatar (tinted outfit, pose transforms: dip rotate, duck squash, jump arc) + instanced blob shadows; 5 draw calls for entire crowd
+- [x] Screenshot verified: reads as a proper Crossy-Road-style street crowd
 
 ## M3 — OSM Pipeline + Dhanmondi
 - [ ] tools/osm: fetch (Overpass, cached raw → data/raw/), bake (project → simplify → footpath synthesis → buildings → POIs → route graph) → public/levels/dhanmondi.json

@@ -14,6 +14,7 @@ import {
   PlaneGeometry,
   Scene,
 } from 'three';
+import { PlayerAvatar } from '@/gfx/PlayerAvatar';
 import type { GameState } from '@/core/StateMachine';
 import type { GameContext } from '@/core/GameContext';
 import { EventBus } from '@/core/EventBus';
@@ -43,7 +44,7 @@ export class RunState implements GameState {
   private crowdRenderer!: CrowdRenderer;
   private score!: RunScore;
   private hud!: Hud;
-  private playerMesh!: Mesh;
+  private avatar!: PlayerAvatar;
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
   private finished = false;
   private prevS = 0;
@@ -65,6 +66,7 @@ export class RunState implements GameState {
     this.buildScene();
     this.crowd.prewarm(this.player.s);
     this.crowdRenderer = new CrowdRenderer(this.scene, this.crowd, this.corridor);
+    this.avatar = new PlayerAvatar(this.scene);
     this.hud = new Hud(this.ctx.input);
 
     this.bus.on('bump', () => this.hud.toast('ওহ! bumped', 0));
@@ -80,6 +82,7 @@ export class RunState implements GameState {
 
   exit(): void {
     this.hud.dispose();
+    this.avatar.dispose(this.scene);
     this.crowdRenderer.dispose(this.scene);
     this.scene.clear();
     delete this.ctx.testApi.run;
@@ -108,12 +111,7 @@ export class RunState implements GameState {
     const s = this.prevS + (this.player.s - this.prevS) * alpha;
     const t = this.prevT + (this.player.t - this.prevT) * alpha;
     this.corridor.toWorld(s, t, this.pose);
-
-    this.playerMesh.position.set(this.pose.x, this.player.y, this.pose.z);
-    const duckScale = this.player.pose === 3 ? 0.62 : this.player.pose !== 0 ? 0.85 : 1;
-    this.playerMesh.scale.y = duckScale;
-    this.playerMesh.rotation.z =
-      this.player.pose === 1 ? 0.22 : this.player.pose === 2 ? -0.22 : 0;
+    this.avatar.update(this.player, s, t, this.corridor);
 
     // Chase cam: behind and above, looking ahead down the path.
     const cam = this.ctx.camera;
@@ -191,14 +189,5 @@ export class RunState implements GameState {
     );
     gate.position.set(0, 2, -RUN_LENGTH);
     this.scene.add(gate);
-
-    // Player placeholder body.
-    const body = new BoxGeometry(0.55, 1.7, 0.35);
-    body.translate(0, 0.85, 0);
-    this.playerMesh = new Mesh(
-      body,
-      new MeshLambertMaterial({ color: '#e8a33d', flatShading: true }),
-    );
-    this.scene.add(this.playerMesh);
   }
 }

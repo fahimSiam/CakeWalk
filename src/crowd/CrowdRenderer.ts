@@ -1,14 +1,16 @@
 /**
- * Renders the crowd pool as InstancedMeshes. M1 uses simple box bodies with
- * per-instance color + walk bob; M2 swaps the geometry for proper low-poly
- * people with a shader walk cycle — the sim never changes.
+ * Renders the crowd pool as instanced low-poly people with a shader walk
+ * cycle. Draw calls: 1 body mesh + 3 prop overlays (head-loads, baskets,
+ * luggage) + 1 blob-shadow mesh = 5, regardless of agent count.
  */
 import {
-  BoxGeometry,
+  CircleGeometry,
   Color,
   DynamicDrawUsage,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   Object3D,
   Quaternion,
@@ -16,19 +18,36 @@ import {
   Vector3,
 } from 'three';
 import { AgentState, CrowdSystem, MAX_AGENTS } from './CrowdSystem';
-import { ARCHETYPES, Band } from './archetypes';
+import { ARCHETYPES } from './archetypes';
+import {
+  buildBasketGeometry,
+  buildHeadLoadGeometry,
+  buildLuggageGeometry,
+  buildPersonGeometry,
+} from '@/gfx/meshFactory';
+import { applyWalkShader } from '@/gfx/walkShader';
 import type { Corridor, PathPose } from '@/world/Corridor';
 
-const PALETTES: Record<string, string[]> = {
-  male: ['#4a6fa5', '#7a5c43', '#3e7d5a', '#8a8f98', '#5d4a7a'],
-  female: ['#c2577a', '#7a4a9e', '#2e8b8b', '#c27a3d', '#9e3d4a'],
+const SHIRTS: Record<string, string[]> = {
+  male: ['#4a6fa5', '#7a5c43', '#3e7d5a', '#8a8f98', '#5d4a7a', '#36617a'],
+  female: ['#c2577a', '#7a4a9e', '#2e8b8b', '#c27a3d', '#9e3d4a', '#3d7a9e'],
   vendor: ['#b08a3e', '#8f6f2f', '#a0522d'],
   worker: ['#6b705c', '#936639', '#7f4f24'],
 };
 
+/** Which overlay prop an archetype carries. */
+const PROP: Record<string, 'headLoad' | 'basket' | 'luggage' | undefined> = {
+  headLoadCarrier: 'headLoad',
+  hawker: 'basket',
+  luggageDragger: 'luggage',
+};
+
 export class CrowdRenderer {
-  private mesh: InstancedMesh;
-  private loadMesh: InstancedMesh; // head-loads / baskets / luggage overlays
+  private body: InstancedMesh;
+  private props: Record<'headLoad' | 'basket' | 'luggage', InstancedMesh>;
+  private shadows: InstancedMesh;
+  private phaseAttr: InstancedBufferAttribute;
+  private swingAttr: InstancedBufferAttribute;
   private dummy = new Object3D();
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
   private colorCache: Color[][] = [];
@@ -37,28 +56,44 @@ export class CrowdRenderer {
     new Quaternion(),
     new Vector3(0.001, 0.001, 0.001),
   );
+  private meshes: InstancedMesh[];
 
   constructor(scene: Scene, private crowd: CrowdSystem, private corridor: Corridor) {
-    const body = new BoxGeometry(0.55, 1.65, 0.35);
-    body.translate(0, 0.825, 0);
-    this.mesh = new InstancedMesh(body, new MeshLambertMaterial({ flatShading: true }), MAX_AGENTS);
-    this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    scene.add(this.mesh);
+    const bodyMat = new MeshLambertMaterial({ flatShading: true });
+    applyWalkShader(bodyMat, 'instanced');
+    const geo = buildPersonGeometry();
+    this.phaseAttr = new InstancedBufferAttribute(new Float32Array(MAX_AGENTS), 1);
+    this.swingAttr = new InstancedBufferAttribute(new Float32Array(MAX_AGENTS), 1);
+    this.phaseAttr.setUsage(DynamicDrawUsage);
+    this.swingAttr.setUsage(DynamicDrawUsage);
+    geo.setAttribute('aPhase', this.phaseAttr);
+    geo.setAttribute('aSwing', this.swingAttr);
+    this.body = new InstancedMesh(geo, bodyMat, MAX_AGENTS);
 
-    const load = new BoxGeometry(1.0, 0.35, 0.5);
-    load.translate(0, 1.95, 0);
-    this.loadMesh = new InstancedMesh(
-      load,
-      new MeshLambertMaterial({ flatShading: true, color: '#caa472' }),
+    const propMat = new MeshLambertMaterial({ flatShading: true, vertexColors: true });
+    this.props = {
+      headLoad: new InstancedMesh(buildHeadLoadGeometry(), propMat, MAX_AGENTS),
+      basket: new InstancedMesh(buildBasketGeometry(), propMat, MAX_AGENTS),
+      luggage: new InstancedMesh(buildLuggageGeometry(), propMat, MAX_AGENTS),
+    };
+
+    const shadowGeo = new CircleGeometry(0.42, 10);
+    shadowGeo.rotateX(-Math.PI / 2);
+    this.shadows = new InstancedMesh(
+      shadowGeo,
+      new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.22 }),
       MAX_AGENTS,
     );
-    this.loadMesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.loadMesh.frustumCulled = false;
-    scene.add(this.loadMesh);
+
+    this.meshes = [this.body, this.props.headLoad, this.props.basket, this.props.luggage, this.shadows];
+    for (const m of this.meshes) {
+      m.instanceMatrix.setUsage(DynamicDrawUsage);
+      m.frustumCulled = false;
+      scene.add(m);
+    }
 
     for (const arch of ARCHETYPES) {
-      this.colorCache.push((PALETTES[arch.palette] ?? PALETTES.male!).map((c) => new Color(c)));
+      this.colorCache.push((SHIRTS[arch.palette] ?? SHIRTS.male!).map((c) => new Color(c)));
     }
   }
 
@@ -66,43 +101,51 @@ export class CrowdRenderer {
     const { crowd } = this;
     for (let i = 0; i < MAX_AGENTS; i++) {
       if (crowd.state[i] === AgentState.Inactive) {
-        this.mesh.setMatrixAt(i, this.hidden);
-        this.loadMesh.setMatrixAt(i, this.hidden);
+        for (const m of this.meshes) m.setMatrixAt(i, this.hidden);
         continue;
       }
       const archIdx = crowd.archetype[i]!;
       const arch = ARCHETYPES[archIdx]!;
       this.corridor.toWorld(crowd.s[i]!, crowd.t[i]!, this.pose);
 
-      const bob = Math.abs(Math.sin(crowd.phase[i]!)) * 0.06;
-      this.dummy.position.set(this.pose.x, bob, this.pose.z);
-      // Crowd faces its flow direction (default: toward the player → +s is
-      // the player's forward, so they face -dir).
+      this.dummy.position.set(this.pose.x, 0, this.pose.z);
       const facing = crowd.config.flowDirection;
       this.dummy.rotation.set(0, Math.atan2(this.pose.dirX * facing, this.pose.dirZ * facing), 0);
       this.dummy.scale.setScalar(arch.scale);
       this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
+      this.body.setMatrixAt(i, this.dummy.matrix);
 
-      if (arch.band === Band.HIGH || arch.id === 'hawker') {
-        this.loadMesh.setMatrixAt(i, this.dummy.matrix);
-      } else {
-        this.loadMesh.setMatrixAt(i, this.hidden);
+      const prop = PROP[arch.id];
+      for (const key of ['headLoad', 'basket', 'luggage'] as const) {
+        this.props[key].setMatrixAt(i, prop === key ? this.dummy.matrix : this.hidden);
       }
 
+      // Shadow hugs the ground, ignores body scale wobble.
+      this.dummy.position.y = 0.02;
+      this.dummy.updateMatrix();
+      this.shadows.setMatrixAt(i, this.dummy.matrix);
+
+      this.phaseAttr.setX(i, crowd.phase[i]!);
+      const moving = crowd.speed[i]! > 0.05;
+      this.swingAttr.setX(
+        i,
+        crowd.state[i] === AgentState.Panicked ? 0.55 : moving ? 0.35 : 0.04,
+      );
+
       const colors = this.colorCache[archIdx]!;
-      this.mesh.setColorAt(i, colors[crowd.variant[i]! % colors.length]!);
+      this.body.setColorAt(i, colors[crowd.variant[i]! % colors.length]!);
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.loadMesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    for (const m of this.meshes) m.instanceMatrix.needsUpdate = true;
+    this.phaseAttr.needsUpdate = true;
+    this.swingAttr.needsUpdate = true;
+    if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;
   }
 
   dispose(scene: Scene): void {
-    scene.remove(this.mesh, this.loadMesh);
-    this.mesh.geometry.dispose();
-    this.loadMesh.geometry.dispose();
-    (this.mesh.material as MeshLambertMaterial).dispose();
-    (this.loadMesh.material as MeshLambertMaterial).dispose();
+    for (const m of this.meshes) {
+      scene.remove(m);
+      m.geometry.dispose();
+      (m.material as MeshLambertMaterial).dispose();
+    }
   }
 }
