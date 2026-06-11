@@ -14,7 +14,8 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"] },
+    "types": ["node", "vite/client"]
   },
   "include": ["src", "tools", "tests", "e2e"]
 }

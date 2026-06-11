@@ -1,30 +1,53 @@
 import { expect, test } from '@playwright/test';
 
-test('boots into a run without console errors and renders frames', async ({ page }) => {
+test('graybox run boots without console errors and renders frames', async ({ page }) => {
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
   });
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/?debug=1&seed=7');
+  await page.goto('/?debug=1&seed=7&graybox=1');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);
-
   await page.waitForTimeout(500);
+
   const calls = await page.evaluate(() => window.__cakewalk.ctx.renderer.info.render.calls);
   expect(calls).toBeGreaterThan(0);
-
-  const state = await page.evaluate(() => window.__cakewalk.ctx.machine.activeName);
-  expect(state).toBe('run');
+  expect(await page.evaluate(() => window.__cakewalk.ctx.machine.activeName)).toBe('run');
   expect(errors).toEqual([]);
+});
 
-  await page.screenshot({ path: 'e2e/screenshots/run.png' });
+test('route select shows Dhanmondi routes and starts a real run', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+
+  await page.goto('/?debug=1&seed=11');
+  await page.waitForFunction(() => window.__cakewalk?.ready === true);
+  await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
+
+  const routes = await page.evaluate(() => {
+    const rs = window.__cakewalk.ctx.testApi.routeSelect as {
+      routes: { lengthM: number; crowd: number; crossings: number }[];
+    };
+    return rs.routes;
+  });
+  expect(routes.length).toBeGreaterThanOrEqual(2);
+  expect(routes[0]!.lengthM).toBeGreaterThan(400);
+  await page.screenshot({ path: 'e2e/screenshots/route-select.png' });
+
+  await page.evaluate(() => {
+    const rs = window.__cakewalk.ctx.testApi.routeSelect as { start(i: number): void };
+    rs.start(0);
+  });
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: 'e2e/screenshots/run-dhanmondi.png' });
+  expect(errors).toEqual([]);
 });
 
 test('player advances and earns taka with injected sprint input', async ({ page }) => {
-  await page.goto('/?seed=7');
+  await page.goto('/?seed=7&graybox=1');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);
-  // Freeze real-time sim, then step deterministically with sprint held.
   await page.evaluate(() => {
     window.__cakewalk.loop.timeScale = 0;
   });
@@ -45,7 +68,7 @@ test('player advances and earns taka with injected sprint input', async ({ page 
     };
     return { s: run.player.s, taka: run.score.taka, stamina: run.player.stamina };
   });
-  expect(after.s).toBeGreaterThan(before + 15); // sprinted ~5s
+  expect(after.s).toBeGreaterThan(before + 15);
   expect(after.taka).toBeGreaterThan(0);
-  expect(after.stamina).toBeLessThan(100); // jogging drains stamina
+  expect(after.stamina).toBeLessThan(100);
 });

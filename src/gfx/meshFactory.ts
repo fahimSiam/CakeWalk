@@ -104,7 +104,7 @@ export function buildLuggageGeometry(): BufferGeometry {
   return paintColored(bag, new Color('#6d3b8e'));
 }
 
-export function paintColored(geo: BoxGeometry, color: Color): BufferGeometry {
+export function paintColored(geo: BufferGeometry, color: Color): BufferGeometry {
   const count = geo.attributes.position!.count;
   const colors = new Float32Array(count * 3);
   const limb = new Float32Array(count); // limb 0: bob with body

@@ -10,6 +10,7 @@ import { InputSystem } from '@/player/Input';
 import type { GameContext } from '@/core/GameContext';
 import { RunState } from '@/states/RunState';
 import { ResultsState } from '@/states/ResultsState';
+import { RouteSelectState } from '@/states/RouteSelectState';
 
 const app = document.getElementById('app')!;
 const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -36,6 +37,7 @@ const ctx: GameContext = {
 
 ctx.machine.register('run', new RunState(ctx));
 ctx.machine.register('results', new ResultsState(ctx));
+ctx.machine.register('routeSelect', new RouteSelectState(ctx));
 
 const loop = new GameLoop({
   fixedUpdate(dt) {
@@ -75,8 +77,13 @@ window.__cakewalk = {
 
 void (async () => {
   await ctx.save.load();
-  const seed = Number(new URLSearchParams(location.search).get('seed') ?? 1);
-  ctx.machine.transition('run', { seed });
+  const q = new URLSearchParams(location.search);
+  const seed = Number(q.get('seed') ?? 1);
+  if (q.has('graybox')) {
+    ctx.machine.transition('run', { seed });
+  } else {
+    ctx.machine.transition('routeSelect', { areaId: q.get('area') ?? 'dhanmondi', seed });
+  }
   loop.start();
   window.__cakewalk.ready = true;
 })();

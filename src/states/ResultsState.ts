@@ -41,7 +41,7 @@ export class ResultsState implements GameState {
     document.body.appendChild(this.root);
     this.root.querySelector('#cw-retry')!.addEventListener('click', () => {
       this.lastSeed = (this.lastSeed * 1664525 + 1013904223) >>> 0;
-      this.ctx.machine.transition('run', { seed: this.lastSeed });
+      this.ctx.machine.transition('routeSelect', { areaId: 'dhanmondi', seed: this.lastSeed });
     });
   }
 

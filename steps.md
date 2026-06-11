@@ -36,12 +36,14 @@
 - [x] PlayerAvatar (tinted outfit, pose transforms: dip rotate, duck squash, jump arc) + instanced blob shadows; 5 draw calls for entire crowd
 - [x] Screenshot verified: reads as a proper Crossy-Road-style street crowd
 
-## M3 — OSM Pipeline + Dhanmondi
-- [ ] tools/osm: fetch (Overpass, cached raw → data/raw/), bake (project → simplify → footpath synthesis → buildings → POIs → route graph) → public/levels/dhanmondi.json
-- [ ] world/: level loader, chunk streaming, buildings, water/parks, landmark labels, props from POIs (cha dokan, trees, dustbins, bus stops)
-- [ ] routing/: seeded A→B (600–1800 m), k-diverse paths (penalty Dijkstra), per-route stats
-- [ ] RouteSelect screen: canvas area map + route cards (crowd/traffic/crossings/cha/pickpocket/distance)
-- [ ] ODbL attribution (in level JSON + menu/settings screen)
+## M3 — OSM Pipeline + Dhanmondi ✅
+- [x] tools/osm: fetch.ts (Overpass w/ UA header, cached raw committed), bake.ts (project → classify+DP-simplify → intersection graph from shared node ids → buildings (real footprints, levels→height) → POIs (real cha dokans/mosques/markets/bus stops/trees + deterministic synthesis where sparse) → per-edge stats from location types) → public/levels/dhanmondi.json (639 roads, 7.8k buildings, 2.1k POIs, 1034n/1238e graph, 1.3 MB)
+- [x] world/: levelStore (fetch+cache), LevelRenderer (route-proximity filtered: road ribbons, extruded real buildings vertex-colored by kind, water/parks, instanced props: trees/dustbins/cha dokan stalls/bus stops), SplineCorridor (s/t over route polyline, closestS)
+- [x] routing/RouteGraph: seeded A→B in 500–1700 m band, k=4 diverse paths (penalty Dijkstra ×1.7), per-route cards stats (crowd/traffic/pickpocket/cha/crossings)
+- [x] RouteSelect screen: real canvas map (roads/water/parks/landmark labels/A/B/4 colored routes) + stat cards + start; ODbL attribution shown
+- [x] Run drives through real Dhanmondi (route corridor, crowd density from route stats, finish gate at B); chase cam fixed for arbitrary path directions
+- [x] 40 unit + 3 e2e tests green; route-select + in-run screenshots verified
+- [ ] (deferred to M8 perf pass) chunk streaming — current route-radius filter holds 53k tris / 16 draws
 
 ## M4 — Systems & Minigames
 - [ ] Road-crossing minigame: traffic waves (bus/CNG/rickshaw/bike), gap commit, median freeze, overbridge alternative

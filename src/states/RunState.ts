@@ -15,6 +15,10 @@ import {
   Scene,
 } from 'three';
 import { PlayerAvatar } from '@/gfx/PlayerAvatar';
+import { SplineCorridor } from '@/world/SplineCorridor';
+import { LevelRenderer } from '@/world/LevelRenderer';
+import type { BakedArea } from '@/world/levelTypes';
+import type { RouteOption } from '@/routing/RouteGraph';
 import type { GameState } from '@/core/StateMachine';
 import type { GameContext } from '@/core/GameContext';
 import { EventBus } from '@/core/EventBus';
@@ -32,6 +36,9 @@ const CORRIDOR_HALF_WIDTH = 3.2;
 export interface RunParams {
   seed: number;
   density?: number;
+  /** Real-level mode: baked area + chosen route. Absent = graybox corridor. */
+  area?: BakedArea;
+  route?: RouteOption;
 }
 
 export class RunState implements GameState {
@@ -49,19 +56,30 @@ export class RunState implements GameState {
   private finished = false;
   private prevS = 0;
   private prevT = 0;
+  private level: LevelRenderer | null = null;
+  private params: RunParams = { seed: 1 };
+  private runLength = RUN_LENGTH;
 
   constructor(private ctx: GameContext) {}
 
   enter(params?: unknown): void {
     const p = (params as RunParams | undefined) ?? { seed: 1 };
+    this.params = p;
     this.finished = false;
     this.bus = new EventBus();
     this.rng = new Rng(p.seed);
-    this.corridor = new StraightCorridor(RUN_LENGTH + 60, CORRIDOR_HALF_WIDTH);
+    if (p.route) {
+      this.corridor = new SplineCorridor(p.route.pts);
+      this.runLength = Math.max(50, this.corridor.length - 5);
+    } else {
+      this.corridor = new StraightCorridor(RUN_LENGTH + 60, CORRIDOR_HALF_WIDTH);
+      this.runLength = RUN_LENGTH;
+    }
     this.player = new Player();
     this.score = new RunScore(this.bus);
     this.crowd = new CrowdSystem(this.corridor, this.rng.stream('crowd'), this.bus);
     if (p.density) this.crowd.config.density = p.density;
+    else if (p.route) this.crowd.config.density = Math.min(190, 60 + p.route.crowd * 26);
 
     this.buildScene();
     this.crowd.prewarm(this.player.s);
@@ -84,6 +102,8 @@ export class RunState implements GameState {
     this.hud.dispose();
     this.avatar.dispose(this.scene);
     this.crowdRenderer.dispose(this.scene);
+    this.level?.dispose(this.scene);
+    this.level = null;
     this.scene.clear();
     delete this.ctx.testApi.run;
   }
@@ -102,7 +122,7 @@ export class RunState implements GameState {
 
     this.bus.flush();
 
-    if (this.player.s >= RUN_LENGTH) this.finish(true);
+    if (this.player.s >= this.runLength) this.finish(true);
     else if (this.player.health <= 0) this.finish(false);
   }
 
@@ -113,10 +133,15 @@ export class RunState implements GameState {
     this.corridor.toWorld(s, t, this.pose);
     this.avatar.update(this.player, s, t, this.corridor);
 
-    // Chase cam: behind and above, looking ahead down the path.
+    // Chase cam: behind and above along the path direction, looking ahead.
     const cam = this.ctx.camera;
-    cam.position.set(this.pose.x * 0.6, 3.0 + this.player.y * 0.3, this.pose.z + 5.2);
-    cam.lookAt(this.pose.x * 0.8, 1.1, this.pose.z - 6);
+    const back = 5.2;
+    cam.position.set(
+      this.pose.x - this.pose.dirX * back - t * 0.4,
+      3.0 + this.player.y * 0.3,
+      this.pose.z - this.pose.dirZ * back,
+    );
+    cam.lookAt(this.pose.x + this.pose.dirX * 6, 1.1, this.pose.z + this.pose.dirZ * 6);
 
     this.crowdRenderer.render();
     this.hud.set(
@@ -152,6 +177,22 @@ export class RunState implements GameState {
     sun.position.set(-30, 60, -20);
     this.scene.add(sun);
 
+    if (this.params.area && this.params.route) {
+      // Real Dhaka: build the world from baked OSM data along the route.
+      this.level = new LevelRenderer(this.scene, this.params.area, this.params.route.pts);
+      const end: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+      this.corridor.toWorld(this.runLength, 0, end);
+      const gate = new Mesh(
+        new BoxGeometry(6, 4, 0.5),
+        new MeshLambertMaterial({ color: '#3fa34d', flatShading: true }),
+      );
+      gate.position.set(end.x, 2, end.z);
+      gate.rotation.y = Math.atan2(end.dirX, end.dirZ);
+      this.scene.add(gate);
+      return;
+    }
+
+    // Graybox fallback (tests, control spikes).
     // Footpath ribbon.
     const path = new Mesh(
       new PlaneGeometry(CORRIDOR_HALF_WIDTH * 2, RUN_LENGTH + 120),
