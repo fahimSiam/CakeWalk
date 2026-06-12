@@ -44,7 +44,10 @@ export class Soundscape {
       if (Math.random() < 0.65) this.horn();
     }, 2600);
 
+    this.startMusic();
+
     this.unsubs = [
+      bus.on('staminaEmpty', () => this.buzz()),
       bus.on('nearMiss', () => this.bell()),
       bus.on('bump', () => this.thud()),
       bus.on('vehicleHit', () => this.thud(1.6)),
@@ -63,8 +66,47 @@ export class Soundscape {
     this.bedNodes = [];
     if (this.hornTimer) clearInterval(this.hornTimer);
     this.hornTimer = null;
+    if (this.musicTimer) clearInterval(this.musicTimer);
+    this.musicTimer = null;
     for (const off of this.unsubs) off();
     this.unsubs = [];
+  }
+
+  private musicTimer: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Lo-fi street groove, fully synthesized: a soft bass root cycling a
+   * I–VI–IV–V-ish pattern with sparse pentatonic plucks on top. Quiet
+   * enough to live under the horn/crowd bed.
+   */
+  private startMusic(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const bassLine = [0, 0, -3, -3, 5, 5, 7, 7]; // semitones from root
+    const penta = [0, 3, 5, 7, 10, 12];
+    const root = 110; // A2
+    let bar = 0;
+    const semitone = (st: number): number => root * Math.pow(2, st / 12);
+    this.musicTimer = setInterval(() => {
+      const bass = semitone(bassLine[bar % bassLine.length]!);
+      this.tone(bass, 'sine', 0.9, 0.085);
+      this.tone(bass / 2, 'triangle', 0.9, 0.05);
+      // Sparse melody: 0-2 plucks per bar, an octave up.
+      const plucks = Math.random() < 0.7 ? 1 + (Math.random() < 0.3 ? 1 : 0) : 0;
+      for (let i = 0; i < plucks; i++) {
+        setTimeout(
+          () => this.tone(semitone(12 + penta[Math.floor(Math.random() * penta.length)]!), 'triangle', 0.5, 0.06),
+          200 + i * 420,
+        );
+      }
+      bar++;
+    }, 1000);
+  }
+
+  /** Exhausted — empty stamina warning. */
+  private buzz(): void {
+    this.tone(110, 'sawtooth', 0.35, 0.14);
+    setTimeout(() => this.tone(95, 'sawtooth', 0.4, 0.12), 320);
   }
 
   // ---------- public action sounds ----------

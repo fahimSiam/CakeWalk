@@ -28,16 +28,24 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BakedArea, BakedPoi, Vec2 } from './levelTypes';
-import { paintColored } from '@/gfx/meshFactory';
+import { buildRickshawGeometry, paintColored } from '@/gfx/meshFactory';
+import {
+  FACADE_FOR_KIND,
+  ROOF_TINT,
+  facadeMaterial,
+  makeSignboard,
+  type FacadeStyle,
+} from '@/gfx/facades';
 
 const BUILD_RADIUS = 130;
 
+// Brighter than before: these now MULTIPLY the facade texture.
 const KIND_COLORS: Record<string, Color> = {
-  residential: new Color('#b5a48c'),
-  commercial: new Color('#8f9bb3'),
-  mosque: new Color('#7fb89a'),
-  market: new Color('#c2906a'),
-  landmark: new Color('#d8c9a3'),
+  residential: new Color('#d9c9ae'),
+  commercial: new Color('#b9c4d6'),
+  mosque: new Color('#abdcc0'),
+  market: new Color('#e0b48e'),
+  landmark: new Color('#ecdcb8'),
 };
 
 export interface PlacedProp {
@@ -63,6 +71,7 @@ export class LevelRenderer {
     this.addPolys(area.parks, '#7d9e6a', 0.01);
     this.addBuildings(area, near);
     this.addProps(area, near);
+    this.addSignboards(area, routePts);
     scene.add(this.group);
   }
 
@@ -116,7 +125,7 @@ export class LevelRenderer {
   }
 
   private addRouteRibbon(routePts: Vec2[]): void {
-    const g = ribbon(routePts, 5.2, 0.03, new Color('#9b9484'));
+    const g = ribbon(routePts, 7.6, 0.03, new Color('#9b9484'));
     if (g) this.group.add(new Mesh(g, new MeshLambertMaterial({ vertexColors: true })));
   }
 
@@ -143,20 +152,54 @@ export class LevelRenderer {
   }
 
   private addBuildings(area: BakedArea, near: (p: Vec2) => boolean): void {
-    const geos: BufferGeometry[] = [];
+    // Walls grouped by facade style (textured), roofs merged separately
+    // (a tiling window texture on a roof would look broken).
+    const wallsByStyle = new Map<FacadeStyle, BufferGeometry[]>();
+    const roofGeos: BufferGeometry[] = [];
     for (const b of area.buildings) {
       const c = centroid(b.footprint);
       if (!near(c)) continue;
-      const geo = extrudeFootprint(b.footprint, b.height);
-      paintGeometry(geo, KIND_COLORS[b.kind] ?? KIND_COLORS.residential!);
-      geos.push(geo);
+      const { walls, roof } = extrudeFootprint(b.footprint, b.height);
+      paintGeometry(walls, KIND_COLORS[b.kind] ?? KIND_COLORS.residential!);
+      paintGeometry(roof, ROOF_TINT);
+      const style = FACADE_FOR_KIND[b.kind] ?? 'residential';
+      let list = wallsByStyle.get(style);
+      if (!list) wallsByStyle.set(style, (list = []));
+      list.push(walls);
+      roofGeos.push(roof);
     }
-    if (geos.length) {
+    for (const [style, geos] of wallsByStyle) {
       const merged = mergeGeometries(geos, false);
+      merged.computeVertexNormals();
+      this.group.add(new Mesh(merged, facadeMaterial(style)));
+    }
+    if (roofGeos.length) {
+      const merged = mergeGeometries(roofGeos, false);
       merged.computeVertexNormals();
       this.group.add(
         new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })),
       );
+    }
+  }
+
+  /** Real OSM shop/POI names on signboards beside the route (Dhaka's wall of signage). */
+  private addSignboards(area: BakedArea, routePts: Vec2[]): void {
+    const named = area.pois.filter(
+      (p) =>
+        p.name &&
+        (p.kind === 'shop' || p.kind === 'market' || p.kind === 'chaDokan' || p.kind === 'school' || p.kind === 'mosque'),
+    );
+    let count = 0;
+    for (const poi of named) {
+      if (count >= 36) break;
+      const { dist, dirX, dirZ } = nearestOnRoute(poi.pos, routePts);
+      if (dist > 16) continue;
+      const sign = makeSignboard(poi.name!, count);
+      sign.position.set(poi.pos[0], 2.7 + (count % 3) * 0.35, poi.pos[1]);
+      // Face along the street so it reads while walking past.
+      sign.rotation.y = Math.atan2(dirX, dirZ) + Math.PI / 2;
+      this.group.add(sign);
+      count++;
     }
   }
 
@@ -241,7 +284,7 @@ export class LevelRenderer {
       });
       this.group.add(mesh);
     };
-    place(rickshaws, parkedRickshawGeometry());
+    place(rickshaws, buildRickshawGeometry());
     place(poles, utilityPoleGeometry());
   }
 }
@@ -318,19 +361,28 @@ function ribbon(pts: Vec2[], width: number, y: number, color: Color): BufferGeom
   return geo;
 }
 
-function extrudeFootprint(fp: Vec2[], height: number): BufferGeometry {
-  // Walls.
+const STOREY_M = 3.0; // texture tile = one storey
+const BAY_M = 9.6; // tile width = 3 bays ≈ 3.2 m each
+
+function extrudeFootprint(fp: Vec2[], height: number): { walls: BufferGeometry; roof: BufferGeometry } {
+  // Walls with facade UVs: u tiles along each wall's length, v by storey.
   const verts: number[] = [];
+  const uvs: number[] = [];
   const idx: number[] = [];
   for (let i = 0; i < fp.length; i++) {
     const a = fp[i]!;
     const b = fp[(i + 1) % fp.length]!;
     const base = verts.length / 3;
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const u = len / BAY_M;
+    const v = height / STOREY_M;
     verts.push(a[0], 0, a[1], b[0], 0, b[1], b[0], height, b[1], a[0], height, a[1]);
+    uvs.push(0, 0, u, 0, u, v, 0, v);
     idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
   }
   const walls = new BufferGeometry();
   walls.setAttribute('position', new BufferAttribute(new Float32Array(verts), 3));
+  walls.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
   walls.setIndex(idx);
 
   // Roof via earcut (Shape uses XY; map z → -y then rotate).
@@ -340,11 +392,34 @@ function extrudeFootprint(fp: Vec2[], height: number): BufferGeometry {
   const roof = new ShapeGeometry(shape);
   roof.rotateX(-Math.PI / 2);
   roof.translate(0, height, 0);
-  // Attribute sets must match exactly or mergeGeometries returns null.
+  // Attribute sets must match exactly within each merge group.
   roof.deleteAttribute('uv');
   roof.deleteAttribute('normal');
 
-  return mergeGeometries([walls.toNonIndexed(), roof.toNonIndexed()], false);
+  return { walls: walls.toNonIndexed(), roof: roof.toNonIndexed() };
+}
+
+/** Distance + local direction of the closest route segment to a point. */
+function nearestOnRoute(p: Vec2, pts: Vec2[]): { dist: number; dirX: number; dirZ: number } {
+  let best = { dist: Infinity, dirX: 0, dirZ: 1 };
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const dx = b[0] - a[0];
+    const dz = b[1] - a[1];
+    const lenSq = dx * dx + dz * dz;
+    if (lenSq < 0.01) continue;
+    let f = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / lenSq;
+    f = Math.max(0, Math.min(1, f));
+    const px = a[0] + f * dx - p[0];
+    const pz = a[1] + f * dz - p[1];
+    const d = Math.hypot(px, pz);
+    if (d < best.dist) {
+      const len = Math.sqrt(lenSq);
+      best = { dist: d, dirX: dx / len, dirZ: dz / len };
+    }
+  }
+  return best;
 }
 
 function paintGeometry(geo: BufferGeometry, color: Color): void {
@@ -397,28 +472,6 @@ function chaDokanGeometry(): BufferGeometry {
   return mergeGeometries([stallG, awningG, benchG], false);
 }
 
-function parkedRickshawGeometry(): BufferGeometry {
-  const body = new BoxGeometry(0.9, 0.5, 1.6);
-  body.translate(0, 0.55, 0);
-  const seat = new BoxGeometry(0.85, 0.45, 0.6);
-  seat.translate(0, 1.0, -0.4);
-  const canopy = new BoxGeometry(0.95, 0.08, 0.8);
-  canopy.translate(0, 1.55, -0.35);
-  const wheelL = new BoxGeometry(0.08, 0.7, 0.7);
-  wheelL.translate(-0.48, 0.35, -0.3);
-  const wheelR = new BoxGeometry(0.08, 0.7, 0.7);
-  wheelR.translate(0.48, 0.35, -0.3);
-  return mergeGeometries(
-    [
-      paintColored(body, new Color('#3a6fb5')),
-      paintColored(seat, new Color('#b03a4a')),
-      paintColored(canopy, new Color('#e0c46a')),
-      paintColored(wheelL, new Color('#2a2a2a')),
-      paintColored(wheelR, new Color('#2a2a2a')),
-    ],
-    false,
-  );
-}
 
 function utilityPoleGeometry(): BufferGeometry {
   const pole = new CylinderGeometry(0.09, 0.12, 6.5, 5);

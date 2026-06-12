@@ -136,6 +136,9 @@ function bakeArea(area: AreaDef): void {
       addPoi('landmark', pos, name, nameBn);
     } else if (t.natural === 'tree') {
       addPoi('tree', pos);
+    } else if (t.shop && name) {
+      // Real named shops → signboards along the streets (the Dhaka look).
+      addPoi('shop', pos, name, nameBn);
     }
   }
 

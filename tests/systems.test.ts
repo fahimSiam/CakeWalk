@@ -217,7 +217,7 @@ describe('Interactions', () => {
     player.stamina = 10;
     inter.fixedUpdate(DT, player, score); // detect proximity
     expect(inter.nearRest).not.toBeNull();
-    inter.toggleSit(player);
+    inter.toggleSit(player, 3);
     expect(player.resting).toBe(true);
     for (let i = 0; i < 30 * 5; i++) {
       player.fixedUpdate(DT, { lateral: 0, speed: 0, jump: false, shoulderLeft: false, shoulderRight: false, stare: false, phone: false, sandWatch: false, sit: false, overbridge: false }, new StraightCorridor(100, 3));

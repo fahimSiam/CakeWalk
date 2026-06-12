@@ -16,12 +16,25 @@ import {
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { buildPersonGeometry, paintColored } from './meshFactory';
+import {
+  buildCngGeometry,
+  buildPersonGeometry,
+  buildRickshawGeometry,
+  paintColored,
+} from './meshFactory';
+import { loadVehicleModel } from './models';
 import { applyWalkShader } from './walkShader';
 import { MAX_POCKETMARS, PickpocketSystem, PmState } from '@/pickpocket/PickpocketSystem';
 import { MAX_VEHICLES, TrafficSystem, VEHICLE_KINDS } from '@/traffic/TrafficSystem';
 import { StreetLife, MAX_COWS, CowState } from '@/world/StreetLife';
 import type { Corridor, PathPose } from '@/world/Corridor';
+
+/** Translated BoxGeometry shorthand for assembling little creatures. */
+function box(w: number, h: number, d: number, x: number, y: number, z: number): BoxGeometry {
+  const g = new BoxGeometry(w, h, d);
+  g.translate(x, y, z);
+  return g;
+}
 
 const HIDDEN = new Matrix4().compose(
   new Vector3(0, -100, 0),
@@ -95,54 +108,89 @@ export class PickpocketRenderer {
 }
 
 export class TrafficRenderer {
-  private mesh: InstancedMesh;
+  /** One InstancedMesh per vehicle kind: bus/bike are real Kenney models
+   *  (swapped in when loaded), CNG/rickshaw are detailed procedural builds. */
+  private kindMeshes: InstancedMesh[] = [];
+  /** Uniform render scale per kind (GLB models are unit-length along Z). */
+  private kindScale: (number | null)[] = []; // null = box-style xyz scale
   private dummy = new Object3D();
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
-  private colors: Color[];
+  private disposed = false;
 
   constructor(scene: Scene, private traffic: TrafficSystem, private corridor: Corridor) {
-    // One unit box scaled per vehicle kind — a single draw call for all traffic.
-    const geo = new BoxGeometry(1, 1, 1);
-    geo.translate(0, 0.5, 0);
-    this.mesh = new InstancedMesh(
-      paintColored(geo, new Color('#ffffff')),
-      new MeshLambertMaterial({ flatShading: true }),
-      MAX_VEHICLES,
-    );
-    this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    scene.add(this.mesh);
-    this.colors = VEHICLE_KINDS.map((k) => new Color(k.color));
+    const mat = (): MeshLambertMaterial =>
+      new MeshLambertMaterial({ flatShading: true, vertexColors: true });
+    VEHICLE_KINDS.forEach((kind, ki) => {
+      let geo: ReturnType<typeof buildCngGeometry>;
+      let scale: number | null = null;
+      if (kind.id === 'cng') {
+        geo = buildCngGeometry();
+        scale = kind.length / 2.3;
+      } else if (kind.id === 'rickshaw') {
+        geo = buildRickshawGeometry();
+        scale = kind.length / 2.35;
+      } else {
+        // Placeholder box until the Kenney model arrives.
+        const box = new BoxGeometry(1, 1, 1);
+        box.translate(0, 0.5, 0);
+        geo = paintColored(box, new Color(kind.color));
+      }
+      const mesh = new InstancedMesh(geo, mat(), MAX_VEHICLES);
+      mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      this.kindMeshes[ki] = mesh;
+      this.kindScale[ki] = scale;
+
+      // Hero models: Kenney truck for the bus, motorcycle for the bike (MIT).
+      const modelName =
+        kind.id === 'bus' ? 'vehicle-truck-red' : kind.id === 'bike' ? 'vehicle-motorcycle' : null;
+      if (modelName) {
+        void loadVehicleModel(modelName).then((model) => {
+          if (!model || this.disposed) return;
+          mesh.geometry.dispose();
+          (mesh.material as MeshLambertMaterial).dispose();
+          mesh.geometry = model.geometry;
+          mesh.material = model.material as MeshLambertMaterial;
+          this.kindScale[ki] = kind.length; // unit-length model → scale by length
+        });
+      }
+    });
   }
 
   render(): void {
     const tr = this.traffic;
+    // Reset all instances hidden, then place active ones per kind.
+    const counts = new Array<number>(VEHICLE_KINDS.length).fill(0);
     for (let i = 0; i < MAX_VEHICLES; i++) {
-      if (!tr.vActive[i]) {
-        this.mesh.setMatrixAt(i, HIDDEN);
-        continue;
-      }
-      const kind = VEHICLE_KINDS[tr.vKind[i]!]!;
-      // Vehicle space: s = its lateral (width), t = its travel axis (length).
+      if (!tr.vActive[i]) continue;
+      const ki = tr.vKind[i]!;
+      const kind = VEHICLE_KINDS[ki]!;
+      const mesh = this.kindMeshes[ki]!;
       this.corridor.toWorld(tr.vS[i]!, tr.vT[i]!, this.pose);
       this.dummy.position.set(this.pose.x, 0, this.pose.z);
-      // Travel axis is the corridor's lateral normal.
       const nx = -this.pose.dirZ;
       const nz = this.pose.dirX;
       this.dummy.rotation.set(0, Math.atan2(nx * tr.vDir[i]!, nz * tr.vDir[i]!), 0);
-      this.dummy.scale.set(kind.width, kind.height, kind.length);
+      const scale = this.kindScale[ki];
+      if (scale != null) this.dummy.scale.setScalar(scale);
+      else this.dummy.scale.set(kind.width, kind.height, kind.length);
       this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
-      this.mesh.setColorAt(i, this.colors[tr.vKind[i]!]!);
+      mesh.setMatrixAt(counts[ki]!++, this.dummy.matrix);
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
+    this.kindMeshes.forEach((mesh, ki) => {
+      mesh.count = counts[ki]!;
+      mesh.instanceMatrix.needsUpdate = true;
+    });
   }
 
   dispose(scene: Scene): void {
-    scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    (this.mesh.material as MeshLambertMaterial).dispose();
+    this.disposed = true;
+    for (const mesh of this.kindMeshes) {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as MeshLambertMaterial).dispose();
+    }
   }
 }
 
@@ -178,23 +226,36 @@ export class StreetLifeRenderer {
       MAX_COWS,
     );
     this.cowMesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    const dogBody = new BoxGeometry(0.85, 0.3, 0.4);
-    dogBody.translate(0, 0.15, 0);
-    const dogHead = new BoxGeometry(0.3, 0.25, 0.3);
-    dogHead.translate(0.5, 0.2, 0);
-    const dogGeo = mergeGeometries(
-      [paintColored(dogBody, new Color('#9a7b52')), paintColored(dogHead, new Color('#8a6b42'))],
-      false,
-    );
+    // Sleeping street dog: curled body, head on paws, snout, ears, tail.
+    const FUR = new Color('#9a7b52');
+    const FUR_DARK = new Color('#7c6038');
+    const dogParts = [
+      paintColored(box(0.85, 0.32, 0.45, 0, 0.16, 0), FUR), // body
+      paintColored(box(0.34, 0.26, 0.32, 0.5, 0.16, 0.05), FUR), // head
+      paintColored(box(0.16, 0.12, 0.14, 0.68, 0.1, 0.05), FUR_DARK), // snout
+      paintColored(box(0.07, 0.14, 0.05, 0.45, 0.33, -0.06), FUR_DARK), // ear
+      paintColored(box(0.07, 0.14, 0.05, 0.45, 0.33, 0.16), FUR_DARK), // ear
+      paintColored(box(0.3, 0.1, 0.12, -0.5, 0.05, 0.18), FUR_DARK), // curled tail
+      paintColored(box(0.25, 0.08, 0.12, 0.45, 0.04, 0.28), FUR), // front paws
+    ];
     this.dogMesh = new InstancedMesh(
-      dogGeo,
+      mergeGeometries(dogParts, false),
       new MeshLambertMaterial({ flatShading: true, vertexColors: true }),
       32,
     );
-    const catGeo = new BoxGeometry(0.5, 0.28, 0.2);
-    catGeo.translate(0, 0.14, 0);
+    // Darting cat: lean body, head, pointed ears, raised tail.
+    const CAT = new Color('#3a3a3a');
+    const catParts = [
+      paintColored(box(0.5, 0.22, 0.18, 0, 0.21, 0), CAT), // body
+      paintColored(box(0.18, 0.18, 0.18, 0.32, 0.3, 0), CAT), // head
+      paintColored(box(0.05, 0.09, 0.04, 0.36, 0.43, -0.05), CAT), // ear
+      paintColored(box(0.05, 0.09, 0.04, 0.36, 0.43, 0.05), CAT), // ear
+      paintColored(box(0.3, 0.05, 0.05, -0.36, 0.38, 0), CAT), // tail up
+      paintColored(box(0.06, 0.12, 0.06, 0.18, 0.06, 0.06), CAT), // legs
+      paintColored(box(0.06, 0.12, 0.06, -0.18, 0.06, -0.06), CAT),
+    ];
     this.catMesh = new InstancedMesh(
-      paintColored(catGeo, new Color('#3a3a3a')),
+      mergeGeometries(catParts, false),
       new MeshLambertMaterial({ flatShading: true, vertexColors: true }),
       3, // MAX_CATS
     );

@@ -10,25 +10,39 @@ export class SplineCorridor implements Corridor {
   readonly length: number;
   private cum: Float32Array; // cumulative length at each vertex
   private pts: Vec2[];
+  /** Smoothed unit tangent at each vertex (average of adjacent segments). */
+  private tanX: Float32Array;
+  private tanZ: Float32Array;
 
   constructor(
     pts: Vec2[],
-    private half = 2.4,
+    private half = 3.2,
   ) {
     // De-duplicate zero-length segments (graph joints repeat points).
     this.pts = pts.filter(
       (p, i) => i === 0 || Math.hypot(p[0] - pts[i - 1]![0], p[1] - pts[i - 1]![1]) > 0.05,
     );
-    this.cum = new Float32Array(this.pts.length);
+    const n = this.pts.length;
+    this.cum = new Float32Array(n);
     let acc = 0;
-    for (let i = 1; i < this.pts.length; i++) {
-      acc += Math.hypot(
-        this.pts[i]![0] - this.pts[i - 1]![0],
-        this.pts[i]![1] - this.pts[i - 1]![1],
-      );
+    for (let i = 1; i < n; i++) {
+      acc += Math.hypot(this.pts[i]![0] - this.pts[i - 1]![0], this.pts[i]![1] - this.pts[i - 1]![1]);
       this.cum[i] = acc;
     }
     this.length = acc;
+    // Per-vertex tangents: interpolating these inside segments turns hard
+    // polyline corners into smooth direction changes (no more facing snaps).
+    this.tanX = new Float32Array(n);
+    this.tanZ = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const prev = this.pts[Math.max(0, i - 1)]!;
+      const next = this.pts[Math.min(n - 1, i + 1)]!;
+      const dx = next[0] - prev[0];
+      const dz = next[1] - prev[1];
+      const len = Math.hypot(dx, dz) || 1;
+      this.tanX[i] = dx / len;
+      this.tanZ[i] = dz / len;
+    }
   }
 
   halfWidth(_s: number): number {
@@ -49,8 +63,12 @@ export class SplineCorridor implements Corridor {
     const b = this.pts[hi]!;
     const segLen = this.cum[hi]! - this.cum[lo]! || 1;
     const f = (clamped - this.cum[lo]!) / segLen;
-    const dirX = (b[0] - a[0]) / segLen;
-    const dirZ = (b[1] - a[1]) / segLen;
+    // Smoothed direction: blend vertex tangents across the segment.
+    let dirX = this.tanX[lo]! + (this.tanX[hi]! - this.tanX[lo]!) * f;
+    let dirZ = this.tanZ[lo]! + (this.tanZ[hi]! - this.tanZ[lo]!) * f;
+    const dLen = Math.hypot(dirX, dirZ) || 1;
+    dirX /= dLen;
+    dirZ /= dLen;
     // Lateral normal (right of walking direction).
     const nx = -dirZ;
     const nz = dirX;

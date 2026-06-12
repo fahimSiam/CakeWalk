@@ -16,7 +16,11 @@ export interface RoutePoint {
   fruit: boolean;
 }
 
-const REST_RANGE = 3.2;
+// Stalls/benches sit just OFF the walkable strip (|t| can be up to ~7 m),
+// so proximity is judged mostly along s — the player walks "up to" the
+// stall, not into it.
+const REST_RANGE_S = 3.5;
+const REST_RANGE_T = 7.5;
 const FRUIT_RANGE_S = 1.4;
 const FRUIT_RANGE_T = 2.2;
 const PHONE_MIN = 2.5;
@@ -46,7 +50,7 @@ export class Interactions {
     this.nearRest = null;
     for (const p of this.points) {
       if (p.kind === 'tree') continue;
-      if (Math.abs(player.s - p.s) < REST_RANGE && Math.abs(player.t - p.t) < REST_RANGE + 1) {
+      if (Math.abs(player.s - p.s) < REST_RANGE_S && Math.abs(player.t - p.t) < REST_RANGE_T) {
         this.nearRest = p;
         break;
       }
@@ -74,13 +78,16 @@ export class Interactions {
   }
 
   /** Sit/stand toggle (HUD bench button or G key). */
-  toggleSit(player: Player): void {
+  toggleSit(player: Player, corridorHalf: number): void {
     if (this.restingAt) {
       this.standUp(player);
     } else if (this.nearRest && !player.phoneLocked) {
       this.restingAt = this.nearRest;
       player.resting = true;
-      player.t += (this.nearRest.t - player.t) * 0.6; // shuffle to the bench
+      // Shuffle toward the stall but stay on the walkable strip.
+      const edge = corridorHalf - 0.3;
+      player.t = Math.max(-edge, Math.min(edge, this.nearRest.t));
+      player.s = this.nearRest.s;
       this.bus.emit('restStarted', { kind: this.nearRest.kind as 'chaDokan' | 'busStop' });
     }
   }

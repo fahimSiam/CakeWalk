@@ -117,3 +117,16 @@
 
 ## Log (continued)
 - **2026-06-12 (e)**: M11 — menu-first boot (tutorial is now an invitation, not a kidnapping), cartoon faces v2, desktop controls overlay.
+
+## M12 — Street Realism + Feel (user feedback round 3) ✅
+- [x] Smooth cornering: per-vertex tangent interpolation in SplineCorridor (no facing snaps at polyline corners) + critically-damped chase camera
+- [x] Route variety: short routes denser (length factor 0.85–1.3×), long routes alternate crowded/easy sections via per-edge crowd stats (density profile normalized to route average)
+- [x] Rest fixed: stalls sit OFF the walkable strip — proximity now judged along s (3.5 m) with lenient t (7.5 m), sit snaps player to the strip edge by the stall; floating ☕/🪑 bobbing marker above the active rest spot; POI capture radius 8→12 m
+- [x] Wider roads: corridor half-width 2.4→3.2 m, walking ribbon 5.2→7.6 m
+- [x] Audio: lo-fi synthesized background groove (bass pattern + sparse pentatonic plucks) under the city bed; stamina-empty buzz cue (staminaEmpty event now actually emitted)
+- [x] Real 3D models: Kenney (MIT) truck + motorcycle GLBs for bus/bike traffic (flattened to instanced geometry + colormap texture, per-kind draw calls); detailed procedural CNG (green 3-wheeler) + cycle rickshaw in traffic; sleeping dog (snout/ears/tail/paws) and darting cat (ears/tail-up) remodeled; LICENSE-kenney.txt shipped
+- [x] **Street View-feel pass (legal route — no Google assets)**: facade textures (residential windows+balconies / commercial glass+AC / bazaar shutters / plaster) tiled per storey & bay on real OSM footprints with per-kind tinting; roofs separated; **signboards with real OSM shop/POI names** (Bengali renders natively) facing the street, up to 36/route; shop POIs added to bake (re-baked all areas)
+- [x] 74 unit + 6 e2e green; street/rest-marker/crossing screenshots verified
+
+## Log (continued 2)
+- **2026-06-12 (f)**: M12 — smooth corners, sectioned crowd density, rest fix + markers, wider roads, music, Kenney vehicle models + better creature models, facade textures + real shop-name signboards. Note: Google Street View / Maps 3D data is legally unusable (ToS); realism path = OSM data + procedural facades + real OSM signage.

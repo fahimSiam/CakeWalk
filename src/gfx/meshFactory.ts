@@ -134,6 +134,63 @@ export function buildLuggageGeometry(): BufferGeometry {
   return paintColored(bag, new Color('#6d3b8e'));
 }
 
+/** Cycle rickshaw — Dhaka's icon. Used parked roadside and in traffic. */
+export function buildRickshawGeometry(): BufferGeometry {
+  const body = new BoxGeometry(0.9, 0.5, 1.6);
+  body.translate(0, 0.55, 0);
+  const seat = new BoxGeometry(0.85, 0.45, 0.6);
+  seat.translate(0, 1.0, -0.4);
+  const canopy = new BoxGeometry(0.95, 0.08, 0.8);
+  canopy.translate(0, 1.55, -0.35);
+  const wheelL = new BoxGeometry(0.08, 0.7, 0.7);
+  wheelL.translate(-0.48, 0.35, -0.3);
+  const wheelR = new BoxGeometry(0.08, 0.7, 0.7);
+  wheelR.translate(0.48, 0.35, -0.3);
+  const frontWheel = new BoxGeometry(0.08, 0.6, 0.6);
+  frontWheel.translate(0, 0.3, 0.75);
+  const handle = new BoxGeometry(0.6, 0.06, 0.06);
+  handle.translate(0, 1.0, 0.55);
+  return mergeGeometries(
+    [
+      paintColored(body, new Color('#3a6fb5')),
+      paintColored(seat, new Color('#b03a4a')),
+      paintColored(canopy, new Color('#e0c46a')),
+      paintColored(wheelL, new Color('#2a2a2a')),
+      paintColored(wheelR, new Color('#2a2a2a')),
+      paintColored(frontWheel, new Color('#2a2a2a')),
+      paintColored(handle, new Color('#555')),
+    ],
+    false,
+  );
+}
+
+/** CNG auto-rickshaw: the green three-wheeler cage. */
+export function buildCngGeometry(): BufferGeometry {
+  const body = new BoxGeometry(1.25, 1.1, 2.3);
+  body.translate(0, 0.85, 0);
+  const windshield = new BoxGeometry(1.1, 0.5, 0.06);
+  windshield.translate(0, 1.15, 1.16);
+  const roof = new BoxGeometry(1.3, 0.08, 2.0);
+  roof.translate(0, 1.46, -0.1);
+  const wheelF = new BoxGeometry(0.14, 0.5, 0.5);
+  wheelF.translate(0, 0.25, 1.0);
+  const wheelL = new BoxGeometry(0.14, 0.55, 0.55);
+  wheelL.translate(-0.62, 0.28, -0.7);
+  const wheelR = new BoxGeometry(0.14, 0.55, 0.55);
+  wheelR.translate(0.62, 0.28, -0.7);
+  return mergeGeometries(
+    [
+      paintColored(body, new Color('#2e7d4f')),
+      paintColored(windshield, new Color('#a8c8e0')),
+      paintColored(roof, new Color('#256640')),
+      paintColored(wheelF, new Color('#222')),
+      paintColored(wheelL, new Color('#222')),
+      paintColored(wheelR, new Color('#222')),
+    ],
+    false,
+  );
+}
+
 export function paintColored(geo: BufferGeometry, color: Color): BufferGeometry {
   const count = geo.attributes.position!.count;
   const colors = new Float32Array(count * 3);

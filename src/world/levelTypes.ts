@@ -31,7 +31,8 @@ export type PoiKind =
   | 'landmark'
   | 'school'
   | 'tree'
-  | 'dustbin';
+  | 'dustbin'
+  | 'shop';
 
 export interface BakedPoi {
   kind: PoiKind;

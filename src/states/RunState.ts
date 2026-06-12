@@ -38,6 +38,7 @@ import { PickpocketRenderer, StreetLifeRenderer, TrafficRenderer } from '@/gfx/e
 import { PhoneOverlay } from '@/ui/PhoneOverlay';
 import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
+import { RestMarker } from '@/gfx/RestMarker';
 import {
   OUTFIT_COLORS,
   localDateKey,
@@ -130,6 +131,9 @@ export class RunState implements GameState {
   private tutorialStep = 0;
   private tutorialTheftDone = false;
   private tutorialTheftStaged = false;
+  private camInit = false;
+  private camLook = { x: 0, z: 0 };
+  private restMarker!: RestMarker;
 
   constructor(private ctx: GameContext) {}
 
@@ -141,6 +145,7 @@ export class RunState implements GameState {
     this.reviveUsed = false;
     this.summary = { chaCups: 0, fruits: 0, directCrossings: 0, nearMisses: 0, spotted: 0, distanceM: 0 };
     this.ghostFrames = [];
+    this.camInit = false;
     this.bus = new EventBus();
     this.rng = new Rng(p.seed);
     if (p.route) {
@@ -162,10 +167,16 @@ export class RunState implements GameState {
     else if (p.route) {
       // Softer base curve + newcomer grace until the first 5 stars are earned.
       const newcomer = totalStars(this.ctx.save.get().stars) < 5 ? 0.7 : 1;
+      // Route-length trade-off: short routes are denser gauntlets; long
+      // routes run lighter overall but alternate crowded/easy sections.
+      const lengthFactor = Math.max(0.85, Math.min(1.3, 1.35 - p.route.lengthM / 1800));
       this.crowd.config.density = Math.min(
-        170,
-        Math.round((30 + p.route.crowd * 22) * this.atmosphere.crowdDensityMul * newcomer),
+        180,
+        Math.round(
+          (30 + p.route.crowd * 22) * this.atmosphere.crowdDensityMul * newcomer * lengthFactor,
+        ),
       );
+      this.crowd.config.profile = this.buildDensityProfile(p);
     }
     this.crowd.config.widthAdd = this.atmosphere.agentWidthAdd;
 
@@ -266,6 +277,7 @@ export class RunState implements GameState {
     this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor);
     this.trafficRenderer = new TrafficRenderer(this.scene, this.traffic, this.corridor);
     this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor);
+    this.restMarker = new RestMarker(this.scene);
     this.hud = new Hud(this.ctx.input);
     this.phoneOverlay = new PhoneOverlay();
     this.rewindFx = new RewindFx(this.ctx.renderer.domElement);
@@ -333,6 +345,37 @@ export class RunState implements GameState {
     };
   }
 
+  /**
+   * Per-section density from the route's real edge stats: walking through a
+   * bazaar edge (crowd 5) is packed, a residential edge (crowd 1) breathes.
+   * Normalized around the route average so the base density stays honest.
+   */
+  private buildDensityProfile(p: RunParams): ((s: number) => number) | null {
+    const { area, route } = p;
+    if (!area || !route || route.edgePath.length < 2) return null;
+    const segs: { end: number; crowd: number }[] = [];
+    let acc = 0;
+    let sum = 0;
+    for (const ei of route.edgePath) {
+      const e = area.graph.edges[ei]!;
+      acc += e.stats.lengthM;
+      segs.push({ end: acc, crowd: e.stats.crowd });
+      sum += e.stats.crowd * e.stats.lengthM;
+    }
+    const avg = sum / acc || 1;
+    return (s: number) => {
+      let crowd = segs[segs.length - 1]!.crowd;
+      for (const seg of segs) {
+        if (s <= seg.end) {
+          crowd = seg.crowd;
+          break;
+        }
+      }
+      // 1..5 around the route average → roughly 0.6×..1.5×.
+      return Math.max(0.55, Math.min(1.55, 0.55 + (crowd / avg) * 0.45));
+    };
+  }
+
   /** Crossing zones from route nodes flagged majorCrossing. */
   private buildCrossingZones(): CrossingZone[] {
     const zones: CrossingZone[] = [];
@@ -370,7 +413,7 @@ export class RunState implements GameState {
         corridor.toWorld(s, 0, pose);
         const dx = poi.pos[0] - pose.x;
         const dz = poi.pos[1] - pose.z;
-        if (dx * dx + dz * dz > 8 * 8) continue;
+        if (dx * dx + dz * dz > 12 * 12) continue;
         // Lateral offset = projection on the path normal.
         const t = dx * -pose.dirZ + dz * pose.dirX;
         points.push({ kind: poi.kind, s, t, fruit: poi.kind === 'tree' });
@@ -404,6 +447,7 @@ export class RunState implements GameState {
     this.pmRenderer.dispose(this.scene);
     this.trafficRenderer.dispose(this.scene);
     this.lifeRenderer.dispose(this.scene);
+    this.restMarker.dispose(this.scene);
     this.level?.dispose(this.scene);
     this.level = null;
     this.atmosphereHandle.dispose();
@@ -463,13 +507,17 @@ export class RunState implements GameState {
       this.ctx.audio.jump();
     }
     if (input.stare) this.pickpockets.stare(this.player, this.score);
-    if (input.sit) this.interactions.toggleSit(this.player);
+    if (input.sit) {
+      this.interactions.toggleSit(this.player, this.corridor.halfWidth(this.player.s));
+    }
     if (input.phone) this.interactions.togglePhone(this.player);
     if (input.overbridge) this.traffic.useOverbridge(this.player);
 
     this.prevS = this.player.s;
     this.prevT = this.player.t;
+    const wasExhausted = this.player.exhausted;
     this.player.fixedUpdate(dt, input, this.corridor);
+    if (!wasExhausted && this.player.exhausted) this.bus.emit('staminaEmpty', {});
     this.crowd.fixedUpdate(dt, this.player);
     this.traffic.fixedUpdate(dt, this.player, this.score);
     this.pickpockets.fixedUpdate(dt, this.player, this.score, this.corridor.halfWidth(this.player.s));
@@ -582,20 +630,47 @@ export class RunState implements GameState {
     this.avatar.update(this.player, s, t, this.corridor);
 
     // Chase cam: behind and above along the path direction, looking ahead.
+    // Critically damped toward the target so corners swing smoothly instead
+    // of snapping with the path direction.
     const cam = this.ctx.camera;
     const back = 5.2;
-    cam.position.set(
-      this.pose.x - this.pose.dirX * back - t * 0.4,
-      3.0 + this.player.y * 0.3,
-      this.pose.z - this.pose.dirZ * back,
-    );
-    cam.lookAt(this.pose.x + this.pose.dirX * 6, 1.1, this.pose.z + this.pose.dirZ * 6);
+    const targetX = this.pose.x - this.pose.dirX * back - t * 0.4;
+    const targetY = 3.0 + this.player.y * 0.3;
+    const targetZ = this.pose.z - this.pose.dirZ * back;
+    const lookX = this.pose.x + this.pose.dirX * 6;
+    const lookZ = this.pose.z + this.pose.dirZ * 6;
+    if (this.camInit) {
+      const k = Math.min(1, frameDt * 6);
+      cam.position.x += (targetX - cam.position.x) * k;
+      cam.position.y += (targetY - cam.position.y) * k;
+      cam.position.z += (targetZ - cam.position.z) * k;
+      this.camLook.x += (lookX - this.camLook.x) * Math.min(1, frameDt * 8);
+      this.camLook.z += (lookZ - this.camLook.z) * Math.min(1, frameDt * 8);
+    } else {
+      cam.position.set(targetX, targetY, targetZ);
+      this.camLook = { x: lookX, z: lookZ };
+      this.camInit = true;
+    }
+    cam.lookAt(this.camLook.x, 1.1, this.camLook.z);
 
     this.crowdRenderer.render();
     this.pmRenderer.render();
     this.trafficRenderer.render();
     this.lifeRenderer.render();
     this.renderGhost();
+    // Floating ☕/🪑 cue above the rest spot the sit button would use.
+    const near = this.interactions.nearRest;
+    if (near && !this.player.resting) {
+      const mp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+      this.corridor.toWorld(near.s, near.t, mp);
+      this.restMarker.update(frameDt, {
+        kind: near.kind as 'chaDokan' | 'busStop',
+        x: mp.x,
+        z: mp.z,
+      });
+    } else {
+      this.restMarker.update(frameDt, null);
+    }
     this.hud.set(
       (this.player.health / HEALTH_MAX) * 100,
       this.player.stamina,

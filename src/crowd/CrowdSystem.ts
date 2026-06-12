@@ -41,6 +41,8 @@ export interface CrowdConfig {
   flowDirection: -1 | 1;
   /** Added to every agent's hitbox half-width (rain umbrellas). */
   widthAdd: number;
+  /** Density multiplier along the route (crowded bazaars vs quiet lanes). */
+  profile: ((s: number) => number) | null;
 }
 
 export class CrowdSystem {
@@ -58,7 +60,7 @@ export class CrowdSystem {
   readonly nearMissDone = new Uint8Array(MAX_AGENTS);
 
   activeCount = 0;
-  config: CrowdConfig = { density: 120, flowDirection: -1, widthAdd: 0 };
+  config: CrowdConfig = { density: 120, flowDirection: -1, widthAdd: 0, profile: null };
 
   private spatial = new Map<number, number[]>();
 
@@ -206,7 +208,9 @@ export class CrowdSystem {
     // Gentle start: density ramps in over the first ~80 m of every run so the
     // street fills up gradually instead of mobbing the player at step one.
     const ramp = Math.min(1, 0.45 + (0.55 * playerS) / 80);
-    const targetDensity = Math.round(this.config.density * ramp);
+    // Section character: bazaar edges pack in, residential lanes breathe.
+    const section = this.config.profile ? this.config.profile(playerS) : 1;
+    const targetDensity = Math.round(this.config.density * ramp * section);
     // Despawn behind, count active.
     let active = 0;
     for (let i = 0; i < MAX_AGENTS; i++) {
