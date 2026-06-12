@@ -55,10 +55,11 @@
 - [x] Director: pickpocket suppression after heavy bump 6 s / theft 12 s / bark 8 s; micro-events (hawker/directions/cha offer w/ brief slow)
 - [x] All systems snapshot/restore-ready; 55 unit + 3 e2e green
 
-## M5 — Sand Watch
-- [ ] Snapshot/restore on every sim system (SoA slabs + RNG streams), 180-frame ring buffer
-- [ ] Rewind playback: sepia pass, sand particles, reversed whoosh, slow-mo exit
-- [ ] vitest: rewind determinism via state hashing
+## M5 — Sand Watch ✅
+- [x] Snapshot/restore on every sim system + RNG stream states; 180-frame Float64 ring buffer (~2.3 MB preallocated, zero GC). Two determinism bugs caught & fixed by tests: crowd freeCursor wasn't snapshotted; capture must run AFTER event flush (handlers mutate sim state)
+- [x] SandWatch item: charge per 400 m walked, one charge, disabled on daily; backwards visual scrub (1.5 s) → restore oldest frame → 0.4× slow-mo recovery; HUD ⏳ button w/ conic charge ring (`?sandwatch=1` for dev)
+- [x] RewindFx: sepia via CSS filter on the WebGL canvas + golden sand-grain canvas overlay converging on the watch; color snaps back at the landing
+- [x] vitest: state-hash equality across restore+replay, divergence with different inputs, charge/activation rules, full-buffer rewind distance, daily-disabled (60 tests green; audio whoosh lands with M8 audio pass)
 
 ## M6 — Economy & Meta
 - [ ] Wallet, shop, powerups (glasses/shoes/umbrella/headphones/Sand Watch), cosmetic outfits (palette swaps: lungi, panjabi, school, office)

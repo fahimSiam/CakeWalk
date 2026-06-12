@@ -276,11 +276,12 @@ export class CrowdSystem {
   }
 
   // --- Sand Watch snapshot ---
-  static readonly SNAP_FLOATS = MAX_AGENTS * 6 + 1;
+  static readonly SNAP_FLOATS = MAX_AGENTS * 6 + 2;
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     let o = offset;
     out[o++] = this.activeCount;
+    out[o++] = this.freeCursor;
     for (let i = 0; i < MAX_AGENTS; i++) {
       out[o++] = this.s[i]!;
       out[o++] = this.t[i]!;
@@ -294,9 +295,10 @@ export class CrowdSystem {
     }
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     let o = offset;
     this.activeCount = from[o++]!;
+    this.freeCursor = from[o++]!;
     for (let i = 0; i < MAX_AGENTS; i++) {
       this.s[i] = from[o++]!;
       this.t[i] = from[o++]!;

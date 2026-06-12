@@ -15,6 +15,8 @@ export interface GameContext {
   save: SaveSystem;
   debug: DebugOverlay;
   input: InputSystem;
+  /** Scale the loop's sim time (slow-mo); 1 = normal. */
+  loopTimeScale: (scale: number) => void;
   /** Mutable bag exposed on window.__cakewalk for Playwright/dev tooling. */
   testApi: Record<string, unknown>;
 }

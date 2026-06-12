@@ -200,7 +200,7 @@ export class TrafficSystem {
   // --- Sand Watch snapshot ---
   static readonly SNAP_FLOATS = MAX_VEHICLES * 6 + 2 + 32;
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     let o = offset;
     out[o++] = this.overbridgeTimer;
     out[o++] = this.overbridgeZone ? this.zones.indexOf(this.overbridgeZone) : -1;
@@ -217,7 +217,7 @@ export class TrafficSystem {
     }
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     let o = offset;
     this.overbridgeTimer = from[o++]!;
     const obz = from[o++]!;

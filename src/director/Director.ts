@@ -62,13 +62,13 @@ export class Director {
   // --- Sand Watch snapshot ---
   static readonly SNAP_FLOATS = 3;
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     out[offset] = this.suppressTimer;
     out[offset + 1] = this.microTimer;
     out[offset + 2] = this.microSlow;
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     this.suppressTimer = from[offset]!;
     this.microTimer = from[offset + 1]!;
     this.microSlow = from[offset + 2]!;

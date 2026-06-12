@@ -115,7 +115,7 @@ export class StreetLife {
     return 2 + this.dogs.length + MAX_CATS * 4;
   }
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     let o = offset;
     out[o++] = this.catTimer;
     out[o++] = this.dogs.length;
@@ -128,7 +128,7 @@ export class StreetLife {
     }
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     let o = offset;
     this.catTimer = from[o++]!;
     const n = from[o++]!;

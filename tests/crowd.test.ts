@@ -140,7 +140,7 @@ describe('CrowdSystem', () => {
     crowd.prewarm(0);
     const player = new Player();
     for (let k = 0; k < 60; k++) crowd.fixedUpdate(DT, player);
-    const buf = new Float32Array(CrowdSystem.SNAP_FLOATS);
+    const buf = new Float64Array(CrowdSystem.SNAP_FLOATS);
     crowd.snapshot(buf, 0);
     const sBefore = crowd.s.slice();
     const stateBefore = crowd.state.slice();

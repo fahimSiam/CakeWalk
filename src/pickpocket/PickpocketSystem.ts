@@ -241,7 +241,7 @@ export class PickpocketSystem {
   // --- Sand Watch snapshot ---
   static readonly SNAP_FLOATS = MAX_POCKETMARS * 6 + 4;
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     let o = offset;
     out[o++] = this.stareCooldown;
     out[o++] = this.seatedTell;
@@ -257,7 +257,7 @@ export class PickpocketSystem {
     }
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     let o = offset;
     this.stareCooldown = from[o++]!;
     this.seatedTell = from[o++]!;

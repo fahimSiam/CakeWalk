@@ -95,7 +95,7 @@ export class RunScore {
   // --- Sand Watch snapshot ---
   static readonly SNAP_FLOATS = 8;
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     out[offset] = this.taka;
     out[offset + 1] = this.combo;
     out[offset + 2] = this.meter;
@@ -106,7 +106,7 @@ export class RunScore {
     out[offset + 7] = this.distanceCarry;
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     this.taka = from[offset]!;
     this.combo = from[offset + 1]!;
     this.meter = from[offset + 2]!;

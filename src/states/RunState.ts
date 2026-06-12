@@ -36,6 +36,8 @@ import { Director } from '@/director/Director';
 import { Interactions, type RoutePoint } from '@/world/Interactions';
 import { PickpocketRenderer, StreetLifeRenderer, TrafficRenderer } from '@/gfx/entityRenderers';
 import { PhoneOverlay } from '@/ui/PhoneOverlay';
+import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
+import { RewindFx } from '@/gfx/RewindFx';
 
 const RUN_LENGTH = 500;
 const CORRIDOR_HALF_WIDTH = 3.2;
@@ -46,6 +48,10 @@ export interface RunParams {
   /** Real-level mode: baked area + chosen route. Absent = graybox corridor. */
   area?: BakedArea;
   route?: RouteOption;
+  /** Owned items applied to this run (sandWatch, glasses, …). */
+  items?: string[];
+  /** Daily Commute: Sand Watch disabled for leaderboard integrity. */
+  daily?: boolean;
 }
 
 export class RunState implements GameState {
@@ -75,6 +81,8 @@ export class RunState implements GameState {
   private trafficRenderer!: TrafficRenderer;
   private lifeRenderer!: StreetLifeRenderer;
   private phoneOverlay!: PhoneOverlay;
+  private sandWatch!: SandWatch;
+  private rewindFx!: RewindFx;
 
   constructor(private ctx: GameContext) {}
 
@@ -117,6 +125,35 @@ export class RunState implements GameState {
         .map((pt) => ({ s: pt.s + 7, t: -pt.t })), // dustbins offset from trees deterministically
     );
 
+    // Sand Watch: ring buffer over every sim system + RNG stream states.
+    const rngSnapshot: Snapshottable = {
+      snapshot: (out, off) => {
+        const names = ['crowd', 'pocketmar', 'traffic', 'streetlife', 'director'];
+        names.forEach((n, i) => (out[off + i] = this.rng.stream(n).getState()));
+      },
+      restore: (from, off) => {
+        const names = ['crowd', 'pocketmar', 'traffic', 'streetlife', 'director'];
+        names.forEach((n, i) => this.rng.stream(n).setState(from[off + i]!));
+      },
+    };
+    const buffer = new RewindBuffer([
+      { sys: this.player, floats: Player.SNAP_FLOATS },
+      { sys: this.crowd, floats: CrowdSystem.SNAP_FLOATS },
+      { sys: this.pickpockets, floats: PickpocketSystem.SNAP_FLOATS },
+      { sys: this.traffic, floats: TrafficSystem.SNAP_FLOATS },
+      { sys: this.streetLife, floats: this.streetLife.snapFloats() },
+      { sys: this.interactions, floats: this.interactions.snapFloats() },
+      { sys: this.director, floats: Director.SNAP_FLOATS },
+      { sys: this.score, floats: RunScore.SNAP_FLOATS },
+      { sys: rngSnapshot, floats: 5 },
+    ]);
+    this.sandWatch = new SandWatch(buffer);
+    this.sandWatch.owned =
+      (p.items?.includes('sandWatch') ?? false) ||
+      new URLSearchParams(location.search).has('sandwatch');
+    this.sandWatch.enabled = !p.daily;
+    this.pickpockets.glassesActive = p.items?.includes('glasses') ?? false;
+
     this.buildScene();
     this.crowd.prewarm(this.player.s);
     this.crowdRenderer = new CrowdRenderer(this.scene, this.crowd, this.corridor);
@@ -126,6 +163,7 @@ export class RunState implements GameState {
     this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor);
     this.hud = new Hud(this.ctx.input);
     this.phoneOverlay = new PhoneOverlay();
+    this.rewindFx = new RewindFx(this.ctx.renderer.domElement);
 
     this.bus.on('bump', () => this.hud.toast('ওহ! bumped', 0));
     this.bus.on('cakewalkMeterFull', () => this.hud.toast('CAKEWALK! 2x points', 0));
@@ -166,6 +204,7 @@ export class RunState implements GameState {
       traffic: this.traffic,
       streetLife: this.streetLife,
       interactions: this.interactions,
+      sandWatch: this.sandWatch,
     };
   }
 
@@ -223,8 +262,10 @@ export class RunState implements GameState {
   }
 
   exit(): void {
+    this.ctx.loopTimeScale(1);
     this.hud.dispose();
     this.phoneOverlay.dispose();
+    this.rewindFx.dispose();
     this.avatar.dispose(this.scene);
     this.crowdRenderer.dispose(this.scene);
     this.pmRenderer.dispose(this.scene);
@@ -238,7 +279,35 @@ export class RunState implements GameState {
 
   fixedUpdate(dt: number): void {
     if (this.finished) return;
+
+    // Sand Watch rewind owns the tick while active.
+    const rewind = this.sandWatch.fixedUpdate(dt);
+    if (rewind === 'tick') {
+      this.prevS = this.player.s;
+      this.prevT = this.player.t;
+      return;
+    }
+    if (rewind === 'landed') {
+      this.prevS = this.player.s;
+      this.prevT = this.player.t;
+      this.bus.clearQueue();
+      this.rewindFx.land();
+      this.ctx.loopTimeScale(0.4); // brief slow-mo to correct the mistake
+      return;
+    }
+    if (rewind === 'done') {
+      this.ctx.loopTimeScale(1);
+      this.rewindFx.stop();
+      this.bus.emit('rewindFinished', {});
+    }
+
     const input = this.ctx.input.poll(dt);
+    if (input.sandWatch && this.sandWatch.activate()) {
+      this.bus.emit('rewindStarted', {});
+      this.bus.flush();
+      this.rewindFx.start();
+      return;
+    }
 
     // Edge-triggered context actions before movement.
     if (input.stare) this.pickpockets.stare(this.player, this.score);
@@ -257,9 +326,13 @@ export class RunState implements GameState {
     this.director.fixedUpdate(dt, this.player);
     this.score.fixedUpdate(dt);
     this.score.addDistance(Math.max(0, this.player.s - this.prevS));
+    this.sandWatch.addDistance(Math.max(0, this.player.s - this.prevS));
     this.ctx.debug.agentCount = this.crowd.activeCount;
 
     this.bus.flush();
+    // Capture AFTER the flush: event handlers (combo, director suppression)
+    // mutate sim state, and the snapshot must include those effects.
+    this.sandWatch.buffer.capture();
 
     if (this.player.s >= this.runLength) this.finish(true);
     else if (this.player.health <= 0) this.finish(false);
@@ -298,6 +371,8 @@ export class RunState implements GameState {
       this.player.resting,
       this.traffic.inZone !== null && this.traffic.overbridgeTimer <= 0,
     );
+    this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
+    this.rewindFx.frame(frameDt);
     if (this.player.phoneLocked && this.params.area && this.params.route) {
       this.phoneOverlay.updatePosition(this.params.area, this.params.route.pts, this.pose.x, this.pose.z);
     }

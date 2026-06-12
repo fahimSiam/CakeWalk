@@ -32,6 +32,9 @@ const ctx: GameContext = {
   save: new SaveSystem(),
   debug: new DebugOverlay(renderer),
   input: new InputSystem(app),
+  loopTimeScale: (scale) => {
+    loop.timeScale = scale;
+  },
   testApi: {},
 };
 

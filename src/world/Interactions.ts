@@ -117,7 +117,7 @@ export class Interactions {
     return 4 + this.points.length;
   }
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     let o = offset;
     out[o++] = this.phoneTimer;
     out[o++] = this.phoneElapsed;
@@ -126,7 +126,7 @@ export class Interactions {
     for (const p of this.points) out[o++] = p.fruit ? 1 : 0;
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     let o = offset;
     this.phoneTimer = from[o++]!;
     this.phoneElapsed = from[o++]!;

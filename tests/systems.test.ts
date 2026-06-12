@@ -92,7 +92,7 @@ describe('PickpocketSystem', () => {
     const { bus, rng, player, score } = setup(9);
     const pm = new PickpocketSystem(rng.stream('pm'), bus);
     for (let i = 0; i < 200; i++) pm.fixedUpdate(DT, player, score, 3);
-    const buf = new Float32Array(PickpocketSystem.SNAP_FLOATS);
+    const buf = new Float64Array(PickpocketSystem.SNAP_FLOATS);
     pm.snapshot(buf, 0);
     const states = pm.state.slice();
     const ss = pm.s.slice();

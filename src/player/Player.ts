@@ -146,7 +146,7 @@ export class Player {
   // --- Sand Watch snapshot (fixed-size, no allocation) ---
   static readonly SNAP_FLOATS = 12;
 
-  snapshot(out: Float32Array, offset: number): void {
+  snapshot(out: Float64Array, offset: number): void {
     out[offset] = this.s;
     out[offset + 1] = this.t;
     out[offset + 2] = this.y;
@@ -161,7 +161,7 @@ export class Player {
     out[offset + 11] = 0; // reserved
   }
 
-  restore(from: Float32Array, offset: number): void {
+  restore(from: Float64Array, offset: number): void {
     this.s = from[offset]!;
     this.t = from[offset + 1]!;
     this.y = from[offset + 2]!;

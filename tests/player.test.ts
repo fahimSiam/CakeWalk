@@ -98,7 +98,7 @@ describe('Player', () => {
   it('snapshot/restore round-trips exactly', () => {
     const p = new Player();
     steps(p, 50, intent({ speed: 1, lateral: 0.5 }));
-    const buf = new Float32Array(Player.SNAP_FLOATS);
+    const buf = new Float64Array(Player.SNAP_FLOATS);
     p.snapshot(buf, 0);
     const q = new Player();
     q.restore(buf, 0);

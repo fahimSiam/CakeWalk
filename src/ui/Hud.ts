@@ -40,6 +40,7 @@ export class Hud {
         .cw-btn-stare{right:14px;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px)}
         .cw-btn-phone{right:14px;top:calc(max(10px,env(safe-area-inset-top)) + 64px)}
         .cw-btn-sit{left:14px;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px);display:none}
+        .cw-btn-watch{right:14px;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 148px);display:none}
         .cw-btn-bridge{left:50%;transform:translateX(-50%);bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px);
           width:auto;border-radius:14px;padding:0 18px;font-size:15px;font-weight:800;display:none}
         .cw-crossing{position:absolute;top:34%;left:50%;transform:translateX(-50%);color:#ffd34a;
@@ -56,6 +57,7 @@ export class Hud {
       <button class="cw-btn cw-btn-stare">👀</button>
       <button class="cw-btn cw-btn-phone">🗺️</button>
       <button class="cw-btn cw-btn-sit">🪑</button>
+      <button class="cw-btn cw-btn-watch">⏳</button>
       <button class="cw-btn cw-btn-bridge">🌉 overbridge</button>
       <div class="cw-crossing">⚠️ CROSSING — time the gap!<br><span style="font-size:13px;opacity:.85">or take the overbridge (safe, no bonus)</span></div>
     `;
@@ -80,7 +82,21 @@ export class Hud {
     bind('.cw-btn-phone', () => input.pressPhone());
     this.sitBtn = bind('.cw-btn-sit', () => input.pressSit());
     this.bridgeBtn = bind('.cw-btn-bridge', () => input.pressOverbridge());
+    this.watchBtn = bind('.cw-btn-watch', () => input.pressSandWatch());
     this.crossingEl = this.root.querySelector('.cw-crossing')!;
+  }
+
+  private watchBtn!: HTMLButtonElement;
+
+  /** Sand Watch charge indicator (hidden unless owned). */
+  setSandWatch(owned: boolean, charge: number, canUse: boolean): void {
+    this.watchBtn.style.display = owned ? 'flex' : 'none';
+    if (!owned) return;
+    this.watchBtn.style.opacity = canUse ? '1' : '0.45';
+    // Conic ring shows charge progress.
+    this.watchBtn.style.background = canUse
+      ? 'rgba(232,163,61,.85)'
+      : `conic-gradient(#e8a33d ${charge * 360}deg, rgba(0,0,0,.5) 0deg)`;
   }
 
   private sitBtn!: HTMLButtonElement;
