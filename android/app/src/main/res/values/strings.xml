@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CakeWalk</string>
+    <string name="title_activity_main">CakeWalk</string>
+    <string name="package_name">ai.agentsense.cakewalk</string>
+    <string name="custom_url_scheme">ai.agentsense.cakewalk</string>
+</resources>

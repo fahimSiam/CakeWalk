@@ -5,3 +5,7 @@ playwright-report/
 test-results/
 .DS_Store
 *.log
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
