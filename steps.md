@@ -69,11 +69,11 @@
 - [x] Streaks (consecutive-day), 3 deterministic daily missions w/ taka rewards, Ajker Rasta daily (date-seed → area+route, Sand Watch off, one banked attempt, local leaderboard, ghost record/race vs translucent best), share card (canvas → native share/download), mid-run ad revive (not on daily), post-run taka doubler
 - [x] MenuState home (areas/energy/streak/wallet/shop/missions/settings + ODbL attribution + language/audio toggles); 72 unit + 4 e2e green
 
-## M7 — All Areas + Theming
-- [ ] Bake Uttara, Bashundhara R/A, Mohammadpur, Puran Dhaka, Gulistan/Motijheel
-- [ ] Per-area tuning (crowd/traffic/pickpocket profiles per idea.md §3.2)
-- [ ] Time-of-day/weather: rain (slippery, umbrellas), noon heat, evening rush
-- [ ] Eid theming: cows (moving walls), luggage/head-load crowd mix, escaped-cow stampede event
+## M7 — All Areas + Theming ✅
+- [x] All 6 areas fetched + baked from real OSM (uttara 1.3 MB, bashundhara 1.2, mohammadpur 2.0, puran_dhaka 2.3, gulistan 1.1); per-area tuning multipliers baked into edge stats (crowd/traffic/pickpocket per idea.md §3.2)
+- [x] Atmosphere: seeded time-of-day (morning/noon/evening) × weather (clear/rain): noon = +30% stamina drain, evening = +25% crowd, rain = player slow (umbrella negates) + crowd umbrellas widen hitboxes + sky/fog palettes + rain particle field
+- [x] Eid theming: led Qurbani cows (slow wide walls in the exodus flow), Director-scheduled **escaped-cow stampede** (3 fast cows, crowd panic, ৳80 survival bonus, hit = 35 dmg + voids bonus), low-poly cow renderer; luggage/head-load crowd already in archetype mix
+- [x] All cow/atmosphere state snapshot-covered for rewind; 74 unit + 5 e2e green (all areas runnable)
 
 ## M8 — FTUE, Audio, i18n, Polish
 - [ ] FTUE: scripted first-60 s, first crossing, first theft + glasses offer; unrated

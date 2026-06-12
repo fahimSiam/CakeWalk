@@ -53,6 +53,8 @@ export class Player {
   walkPhase = 0;
   /** <1 with Good Shoes (stamina drains slower). */
   staminaEfficiency = 1;
+  /** <1 in rain without an umbrella. */
+  speedMul = 1;
 
   get jumping(): boolean {
     return this.jumpTimer > 0;
@@ -87,6 +89,7 @@ export class Player {
           : SPEED_WALK;
     if (this.pose === Pose.Duck) target = Math.min(target, SPEED_WALK);
     if (this.exhausted) target = SPEED_SHUFFLE;
+    target *= this.speedMul;
     // Smooth accel/decel so speed reads as human, not instant.
     this.speed += (target - this.speed) * Math.min(1, dt * 6);
 

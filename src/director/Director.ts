@@ -20,6 +20,10 @@ export type MicroEventKind = (typeof MICRO_EVENTS)[number];
 export class Director {
   private suppressTimer = 0;
   private microTimer = 25;
+  /** Escaped-cow stampede scheduler (rare, Eid exodus signature event). */
+  private stampedeTimer = 90;
+  /** RunState consumes this flag and triggers StreetLife.startStampede. */
+  stampedeRequested = false;
   /** Set while a micro-event slow-zone is active. */
   microSlow = 0;
 
@@ -44,6 +48,13 @@ export class Director {
       // A hawker holding your sleeve: gentle slow unless you swerve hard.
       player.s -= Math.min(player.speed * 0.35, 1.2) * dt;
     }
+    this.stampedeTimer -= dt;
+    if (this.stampedeTimer <= 0) {
+      this.stampedeTimer = this.rng.range(110, 220);
+      if (this.suppressTimer <= 0 && !player.resting && !player.phoneLocked) {
+        this.stampedeRequested = true;
+      }
+    }
     this.microTimer -= dt;
     if (this.microTimer <= 0) {
       this.microTimer = this.rng.range(22, 45);
@@ -60,17 +71,20 @@ export class Director {
   }
 
   // --- Sand Watch snapshot ---
-  static readonly SNAP_FLOATS = 3;
+  static readonly SNAP_FLOATS = 4;
 
   snapshot(out: Float64Array, offset: number): void {
     out[offset] = this.suppressTimer;
     out[offset + 1] = this.microTimer;
     out[offset + 2] = this.microSlow;
+    out[offset + 3] = this.stampedeTimer;
   }
 
   restore(from: Float64Array, offset: number): void {
     this.suppressTimer = from[offset]!;
     this.microTimer = from[offset + 1]!;
     this.microSlow = from[offset + 2]!;
+    this.stampedeTimer = from[offset + 3]!;
+    this.stampedeRequested = false;
   }
 }

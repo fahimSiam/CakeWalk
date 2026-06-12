@@ -46,6 +46,7 @@ import {
   type RunSummary,
 } from '@/meta/progression';
 import { buildPersonGeometry } from '@/gfx/meshFactory';
+import { dressScene, rollAtmosphere, type AtmosphereMods } from '@/world/Atmosphere';
 
 const RUN_LENGTH = 500;
 const CORRIDOR_HALF_WIDTH = 3.2;
@@ -106,6 +107,8 @@ export class RunState implements GameState {
   private ghostFrames: { s: number; t: number }[] = [];
   private ghostBest: { s: number; t: number }[] = [];
   private ghostMesh: Mesh | null = null;
+  private atmosphere!: AtmosphereMods;
+  private atmosphereFrame: (frameDt: number) => void = () => {};
 
   constructor(private ctx: GameContext) {}
 
@@ -128,9 +131,19 @@ export class RunState implements GameState {
     }
     this.player = new Player();
     this.score = new RunScore(this.bus);
+    this.atmosphere = rollAtmosphere(
+      this.rng.stream('weather'),
+      this.ctx.save.get().ownedItems.includes('umbrella'),
+    );
     this.crowd = new CrowdSystem(this.corridor, this.rng.stream('crowd'), this.bus);
     if (p.density) this.crowd.config.density = p.density;
-    else if (p.route) this.crowd.config.density = Math.min(190, 60 + p.route.crowd * 26);
+    else if (p.route) {
+      this.crowd.config.density = Math.min(
+        190,
+        Math.round((60 + p.route.crowd * 26) * this.atmosphere.crowdDensityMul),
+      );
+    }
+    this.crowd.config.widthAdd = this.atmosphere.agentWidthAdd;
 
     // M4 systems.
     this.director = new Director(this.rng.stream('director'), this.bus);
@@ -188,6 +201,8 @@ export class RunState implements GameState {
     }
     if (save.ownedItems.includes('shoes')) this.player.staminaEfficiency = 0.8;
     if (save.ownedItems.includes('headphones')) this.score.meterGainMul = 1.25;
+    this.player.staminaEfficiency *= this.atmosphere.staminaDrainMul; // noon heat
+    this.player.speedMul = this.atmosphere.playerSpeedMul; // rain w/o umbrella
 
     this.buildScene();
     this.crowd.prewarm(this.player.s);
@@ -223,6 +238,11 @@ export class RunState implements GameState {
     this.bus.on('fruitGrabbed', () => this.hud.toast('🥭 +12', 0));
     this.bus.on('catStumble', () => this.hud.toast('🐈 cat! combo lost', 0));
     this.bus.on('dogBark', () => this.hud.toast('🐕 WOOF! panic!', 0));
+    this.bus.on('cowStampede', () => this.hud.toast('🐂🐂🐂 STAMPEDE! Get out of the way!', 0));
+    this.bus.on('stampedeSurvived', (e) => {
+      this.score.add(e.bonus, 'stampede');
+      this.hud.toast(`🐂 survived the stampede! +৳${e.bonus}`, 0);
+    });
     this.bus.on('vehicleHit', (e) => this.hud.toast(`🚌 hit by ${e.vehicleKind}!`, 0));
     this.bus.on('crossingResolved', (e) =>
       this.hud.toast(e.method === 'direct' ? `🎉 crossed! +৳${e.bonus}` : '🌉 safe & slow', 0),
@@ -381,6 +401,10 @@ export class RunState implements GameState {
     this.streetLife.fixedUpdate(dt, this.player, this.crowd);
     this.interactions.fixedUpdate(dt, this.player, this.score);
     this.director.fixedUpdate(dt, this.player);
+    if (this.director.stampedeRequested) {
+      this.director.stampedeRequested = false;
+      this.streetLife.startStampede(this.player, this.crowd);
+    }
     this.score.fixedUpdate(dt);
     this.score.addDistance(Math.max(0, this.player.s - this.prevS));
     this.sandWatch.addDistance(Math.max(0, this.player.s - this.prevS));
@@ -480,6 +504,7 @@ export class RunState implements GameState {
     );
     this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
     this.rewindFx.frame(frameDt);
+    this.atmosphereFrame(frameDt);
     if (this.player.phoneLocked && this.params.area && this.params.route) {
       this.phoneOverlay.updatePosition(this.params.area, this.params.route.pts, this.pose.x, this.pose.z);
     }
@@ -553,6 +578,11 @@ export class RunState implements GameState {
     const sun = new DirectionalLight(0xffe7c0, 1.1);
     sun.position.set(-30, 60, -20);
     this.scene.add(sun);
+    // Time-of-day & weather overrides + rain updater.
+    this.atmosphereFrame = dressScene(this.scene, this.atmosphere, () => ({
+      x: this.pose.x,
+      z: this.pose.z,
+    }));
 
     if (this.params.area && this.params.route) {
       // Real Dhaka: build the world from baked OSM data along the route.

@@ -27,6 +27,16 @@ const DOG_SPACING = 130;
 const CAT_INTERVAL_MIN = 11;
 const CAT_INTERVAL_MAX = 24;
 
+export const MAX_COWS = 6;
+export const enum CowState {
+  Inactive = 0,
+  Led = 1, // walked to the haat: slow, wide moving wall in the crowd flow
+  Stampede = 2, // escaped! fast, panicking everyone
+}
+const LED_COW_INTERVAL_MIN = 40;
+const LED_COW_INTERVAL_MAX = 85;
+const STAMPEDE_BONUS = 80;
+
 export class StreetLife {
   dogs: DogSpot[] = [];
   dustbins: DustbinSpot[] = [];
@@ -37,6 +47,15 @@ export class StreetLife {
   readonly catDir = new Float32Array(MAX_CATS);
   readonly catActive = new Uint8Array(MAX_CATS);
   private catTimer = 8;
+
+  // Qurbani cows (Eid exodus theming, idea.md §1.1).
+  readonly cowS = new Float32Array(MAX_COWS);
+  readonly cowT = new Float32Array(MAX_COWS);
+  readonly cowSpeed = new Float32Array(MAX_COWS);
+  readonly cowState = new Uint8Array(MAX_COWS);
+  private cowTimer = 20;
+  private stampedeActive = false;
+  private stampedeHit = false;
 
   constructor(
     private rng: RngStream,
@@ -79,6 +98,8 @@ export class StreetLife {
       crowd.repelFrom(bin.s, bin.t, 2.6, 2.2 * dt);
     }
 
+    this.updateCows(dt, player, crowd);
+
     // Cats.
     this.catTimer -= dt;
     if (this.catTimer <= 0) {
@@ -99,6 +120,73 @@ export class StreetLife {
     }
   }
 
+  /** Escaped-cow stampede (Director-triggered): big hazard, big reward. */
+  startStampede(player: Player, crowd: CrowdSystem): void {
+    if (this.stampedeActive) return;
+    this.stampedeActive = true;
+    this.stampedeHit = false;
+    let spawned = 0;
+    for (let i = 0; i < MAX_COWS && spawned < 3; i++) {
+      if (this.cowState[i] !== CowState.Inactive) continue;
+      this.cowState[i] = CowState.Stampede;
+      this.cowS[i] = player.s + 38 + spawned * 6;
+      this.cowT[i] = this.rng.range(-2, 2);
+      this.cowSpeed[i] = this.rng.range(6.2, 7.5);
+      spawned++;
+    }
+    if (spawned > 0) {
+      crowd.panicNear(player.s + 25, 0, 30);
+      this.bus.emit('cowStampede', {});
+    } else {
+      this.stampedeActive = false;
+    }
+  }
+
+  private updateCows(dt: number, player: Player, crowd: CrowdSystem): void {
+    // A led cow joins the exodus flow every now and then.
+    this.cowTimer -= dt;
+    if (this.cowTimer <= 0) {
+      this.cowTimer = this.rng.range(LED_COW_INTERVAL_MIN, LED_COW_INTERVAL_MAX);
+      for (let i = 0; i < MAX_COWS; i++) {
+        if (this.cowState[i] !== CowState.Inactive) continue;
+        this.cowState[i] = CowState.Led;
+        this.cowS[i] = player.s + this.rng.range(40, 80);
+        this.cowT[i] = this.rng.range(-1.5, 1.5);
+        this.cowSpeed[i] = this.rng.range(0.7, 1.0);
+        break;
+      }
+    }
+
+    let stampedeStillRunning = false;
+    for (let i = 0; i < MAX_COWS; i++) {
+      if (this.cowState[i] === CowState.Inactive) continue;
+      this.cowS[i]! -= this.cowSpeed[i]! * dt; // both kinds move toward the player
+      const isStampede = this.cowState[i] === CowState.Stampede;
+      if (isStampede) {
+        stampedeStillRunning = stampedeStillRunning || this.cowS[i]! > player.s - 5;
+        crowd.repelFrom(this.cowS[i]!, this.cowT[i]!, 3.5, 4 * dt);
+      }
+      // A cow is a wall: jump doesn't clear it, duck doesn't either.
+      if (
+        Math.abs(player.s - this.cowS[i]!) < 1.3 &&
+        Math.abs(player.t - this.cowT[i]!) < 1.15
+      ) {
+        if (player.applyBump(isStampede ? 35 : 16)) {
+          this.bus.emit('bump', { severity: isStampede ? 35 : 16, agentIndex: -2 });
+          player.s = this.cowS[i]! - 1.6; // shoved back
+          if (isStampede) this.stampedeHit = true;
+        }
+      }
+      if (this.cowS[i]! < player.s - 12) this.cowState[i] = CowState.Inactive;
+    }
+
+    // Survived the stampede untouched → big bonus (survival, not mockery).
+    if (this.stampedeActive && !stampedeStillRunning) {
+      this.stampedeActive = false;
+      if (!this.stampedeHit) this.bus.emit('stampedeSurvived', { bonus: STAMPEDE_BONUS });
+    }
+  }
+
   private spawnCat(player: Player): void {
     for (let i = 0; i < MAX_CATS; i++) {
       if (this.catActive[i]) continue;
@@ -110,15 +198,18 @@ export class StreetLife {
     }
   }
 
-  // --- Sand Watch snapshot (dogs barked flags + cats; placements are static) ---
+  // --- Sand Watch snapshot (dynamic state; placements are static) ---
   snapFloats(): number {
-    return 2 + this.dogs.length + MAX_CATS * 4;
+    return 5 + this.dogs.length + MAX_CATS * 4 + MAX_COWS * 4;
   }
 
   snapshot(out: Float64Array, offset: number): void {
     let o = offset;
     out[o++] = this.catTimer;
+    out[o++] = this.cowTimer;
+    out[o++] = (this.stampedeActive ? 1 : 0) + (this.stampedeHit ? 2 : 0);
     out[o++] = this.dogs.length;
+    out[o++] = 0; // reserved
     for (const dog of this.dogs) out[o++] = dog.barked ? 1 : 0;
     for (let i = 0; i < MAX_CATS; i++) {
       out[o++] = this.catS[i]!;
@@ -126,18 +217,35 @@ export class StreetLife {
       out[o++] = this.catDir[i]!;
       out[o++] = this.catActive[i]!;
     }
+    for (let i = 0; i < MAX_COWS; i++) {
+      out[o++] = this.cowS[i]!;
+      out[o++] = this.cowT[i]!;
+      out[o++] = this.cowSpeed[i]!;
+      out[o++] = this.cowState[i]!;
+    }
   }
 
   restore(from: Float64Array, offset: number): void {
     let o = offset;
     this.catTimer = from[o++]!;
+    this.cowTimer = from[o++]!;
+    const flags = from[o++]!;
+    this.stampedeActive = (flags & 1) !== 0;
+    this.stampedeHit = (flags & 2) !== 0;
     const n = from[o++]!;
+    o++; // reserved
     for (let i = 0; i < n && i < this.dogs.length; i++) this.dogs[i]!.barked = from[o++]! === 1;
     for (let i = 0; i < MAX_CATS; i++) {
       this.catS[i] = from[o++]!;
       this.catT[i] = from[o++]!;
       this.catDir[i] = from[o++]!;
       this.catActive[i] = from[o++]!;
+    }
+    for (let i = 0; i < MAX_COWS; i++) {
+      this.cowS[i] = from[o++]!;
+      this.cowT[i] = from[o++]!;
+      this.cowSpeed[i] = from[o++]!;
+      this.cowState[i] = from[o++]!;
     }
   }
 }

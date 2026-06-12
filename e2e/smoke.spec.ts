@@ -45,6 +45,22 @@ test('route select shows Dhanmondi routes and starts a real run', async ({ page 
   expect(errors).toEqual([]);
 });
 
+test('all six areas load and produce runnable routes', async ({ page }) => {
+  for (const area of ['uttara', 'bashundhara', 'mohammadpur', 'puran_dhaka', 'gulistan']) {
+    const errors: string[] = [];
+    page.on('pageerror', (err) => errors.push(err.message));
+    await page.goto(`/?seed=3&area=${area}`);
+    await page.waitForFunction(() => window.__cakewalk?.ready === true);
+    await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
+    await page.evaluate(() => {
+      (window.__cakewalk.ctx.testApi.routeSelect as { start(i: number): void }).start(0);
+    });
+    await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+    await page.waitForTimeout(250);
+    expect(errors, `area ${area}`).toEqual([]);
+  }
+});
+
 test('menu shows areas/energy and the daily starts without energy cost', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));

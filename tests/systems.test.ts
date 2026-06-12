@@ -257,3 +257,49 @@ describe('Interactions', () => {
     expect(player.phoneLocked).toBe(false);
   });
 });
+
+describe('Cows (Eid theming)', () => {
+  it('stampede panics the crowd and pays a survival bonus', () => {
+    const { bus, rng, player, score } = setup();
+    const corridor = new StraightCorridor(600, 3);
+    const crowd = new CrowdSystem(corridor, rng.stream('c'), bus);
+    crowd.config.density = 30;
+    crowd.prewarm(0);
+    const life = new StreetLife(rng.stream('l'), bus);
+    life.populate(600, 3, []);
+    player.t = 2.9; // hug the edge to dodge
+    let started = false;
+    let bonus = 0;
+    bus.on('cowStampede', () => (started = true));
+    bus.on('stampedeSurvived', (e) => (bonus = e.bonus));
+    life.startStampede(player, crowd);
+    bus.flush();
+    expect(started).toBe(true);
+    for (let i = 0; i < 30 * 20 && bonus === 0; i++) {
+      life.fixedUpdate(DT, player, crowd);
+      bus.flush();
+    }
+    expect(bonus).toBeGreaterThan(0);
+    void score;
+  });
+
+  it('a stampeding cow hit hurts and voids the bonus', () => {
+    const { bus, rng, player } = setup();
+    const corridor = new StraightCorridor(600, 3);
+    const crowd = new CrowdSystem(corridor, rng.stream('c'), bus);
+    const life = new StreetLife(rng.stream('l'), bus);
+    life.populate(600, 3, []);
+    player.t = 0;
+    let bonus = 0;
+    bus.on('stampedeSurvived', (e) => (bonus = e.bonus));
+    life.startStampede(player, crowd);
+    // Park the player in the cows' path.
+    for (let i = 0; i < 30 * 20; i++) {
+      life.fixedUpdate(DT, player, crowd);
+      player.bumpCooldown = 0; // allow repeated checks
+      bus.flush();
+    }
+    expect(player.health).toBeLessThan(100);
+    expect(bonus).toBe(0);
+  });
+});

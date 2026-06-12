@@ -30,6 +30,7 @@ export interface GameEvents {
   dogBark: { x: number; z: number };
   catStumble: Record<string, never>;
   cowStampede: Record<string, never>;
+  stampedeSurvived: { bonus: number };
   microEvent: { kind: string };
   runFinished: { success: boolean };
   cakewalkMeterFull: Record<string, never>;

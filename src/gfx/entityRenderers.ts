@@ -20,7 +20,7 @@ import { buildPersonGeometry, paintColored } from './meshFactory';
 import { applyWalkShader } from './walkShader';
 import { MAX_POCKETMARS, PickpocketSystem, PmState } from '@/pickpocket/PickpocketSystem';
 import { MAX_VEHICLES, TrafficSystem, VEHICLE_KINDS } from '@/traffic/TrafficSystem';
-import { StreetLife } from '@/world/StreetLife';
+import { StreetLife, MAX_COWS, CowState } from '@/world/StreetLife';
 import type { Corridor, PathPose } from '@/world/Corridor';
 
 const HIDDEN = new Matrix4().compose(
@@ -149,10 +149,35 @@ export class TrafficRenderer {
 export class StreetLifeRenderer {
   private dogMesh: InstancedMesh;
   private catMesh: InstancedMesh;
+  private cowMesh: InstancedMesh;
   private dummy = new Object3D();
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
 
   constructor(scene: Scene, private life: StreetLife, private corridor: Corridor) {
+    // Low-poly Qurbani cow: body + head + horns + legs.
+    const cowBody = new BoxGeometry(1.0, 0.85, 1.9);
+    cowBody.translate(0, 1.05, 0);
+    const cowHead = new BoxGeometry(0.5, 0.5, 0.55);
+    cowHead.translate(0, 1.35, 1.15);
+    const cowHorns = new BoxGeometry(0.75, 0.08, 0.1);
+    cowHorns.translate(0, 1.62, 1.2);
+    const cowLegs = new BoxGeometry(0.85, 0.65, 1.6);
+    cowLegs.translate(0, 0.32, 0);
+    const cowGeo = mergeGeometries(
+      [
+        paintColored(cowBody, new Color('#c7b9a5')),
+        paintColored(cowHead, new Color('#b5a48c')),
+        paintColored(cowHorns, new Color('#e8ddc8')),
+        paintColored(cowLegs, new Color('#8a7b66')),
+      ],
+      false,
+    );
+    this.cowMesh = new InstancedMesh(
+      cowGeo,
+      new MeshLambertMaterial({ flatShading: true, vertexColors: true }),
+      MAX_COWS,
+    );
+    this.cowMesh.instanceMatrix.setUsage(DynamicDrawUsage);
     const dogBody = new BoxGeometry(0.85, 0.3, 0.4);
     dogBody.translate(0, 0.15, 0);
     const dogHead = new BoxGeometry(0.3, 0.25, 0.3);
@@ -174,7 +199,7 @@ export class StreetLifeRenderer {
       4,
     );
     this.catMesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    for (const m of [this.dogMesh, this.catMesh]) {
+    for (const m of [this.dogMesh, this.catMesh, this.cowMesh]) {
       m.frustumCulled = false;
       scene.add(m);
     }
@@ -207,10 +232,29 @@ export class StreetLifeRenderer {
       this.catMesh.setMatrixAt(i, this.dummy.matrix);
     }
     this.catMesh.instanceMatrix.needsUpdate = true;
+
+    for (let i = 0; i < MAX_COWS; i++) {
+      if (this.life.cowState[i] === CowState.Inactive) {
+        this.cowMesh.setMatrixAt(i, HIDDEN);
+        continue;
+      }
+      this.corridor.toWorld(this.life.cowS[i]!, this.life.cowT[i]!, this.pose);
+      this.dummy.position.set(this.pose.x, 0, this.pose.z);
+      // Cows walk toward the player (with the exodus flow).
+      this.dummy.rotation.set(0, Math.atan2(-this.pose.dirX, -this.pose.dirZ), 0);
+      const gallop =
+        this.life.cowState[i] === CowState.Stampede
+          ? 1 + Math.abs(Math.sin(this.life.cowS[i]! * 2)) * 0.08
+          : 1;
+      this.dummy.scale.set(1, gallop, 1);
+      this.dummy.updateMatrix();
+      this.cowMesh.setMatrixAt(i, this.dummy.matrix);
+    }
+    this.cowMesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose(scene: Scene): void {
-    for (const m of [this.dogMesh, this.catMesh]) {
+    for (const m of [this.dogMesh, this.catMesh, this.cowMesh]) {
       scene.remove(m);
       m.geometry.dispose();
       (m.material as MeshLambertMaterial).dispose();

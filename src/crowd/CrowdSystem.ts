@@ -39,6 +39,8 @@ export interface CrowdConfig {
   density: number;
   /** -1 = crowd walks toward the player (default premise). */
   flowDirection: -1 | 1;
+  /** Added to every agent's hitbox half-width (rain umbrellas). */
+  widthAdd: number;
 }
 
 export class CrowdSystem {
@@ -56,7 +58,7 @@ export class CrowdSystem {
   readonly nearMissDone = new Uint8Array(MAX_AGENTS);
 
   activeCount = 0;
-  config: CrowdConfig = { density: 120, flowDirection: -1 };
+  config: CrowdConfig = { density: 120, flowDirection: -1, widthAdd: 0 };
 
   private spatial = new Map<number, number[]>();
 
@@ -165,7 +167,7 @@ export class CrowdSystem {
       const arch = ARCHETYPES[this.archetype[i]!]!;
       const ds = Math.abs(this.s[i]! - player.s);
       const dtt = Math.abs(this.t[i]! - player.t);
-      const reach = arch.halfWidth + pHalf;
+      const reach = arch.halfWidth + this.config.widthAdd + pHalf;
 
       if (ds < 0.5 && dtt < reach) {
         // Band check: can the player's pose clear this obstruction?

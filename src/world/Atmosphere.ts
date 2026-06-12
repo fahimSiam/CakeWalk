@@ -1,0 +1,94 @@
+/**
+ * Time-of-day & weather variants (idea.md §6.5). Seeded per run: changes the
+ * light, the sky, and the rules — noon heat drains stamina faster, rain is
+ * slippery (umbrella item negates the player's penalty; the crowd's
+ * umbrellas make everyone effectively wider), evening is rush hour.
+ */
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  Fog,
+  Points,
+  PointsMaterial,
+  Scene,
+} from 'three';
+import type { RngStream } from '@/core/Rng';
+
+export type TimeOfDay = 'morning' | 'noon' | 'evening';
+export type Weather = 'clear' | 'rain';
+
+export interface AtmosphereMods {
+  timeOfDay: TimeOfDay;
+  weather: Weather;
+  /** Multiplier on stamina drain (noon heat). */
+  staminaDrainMul: number;
+  /** Multiplier on player speed (rain without umbrella). */
+  playerSpeedMul: number;
+  /** Multiplier on crowd density (evening rush). */
+  crowdDensityMul: number;
+  /** Added to every agent's hitbox half-width (rain umbrellas). */
+  agentWidthAdd: number;
+}
+
+const PALETTES: Record<TimeOfDay, { sky: string; fogNear: number; hemi: number; sun: number }> = {
+  morning: { sky: '#d8c4a0', fogNear: 35, hemi: 1.1, sun: 1.0 },
+  noon: { sky: '#cfd4cf', fogNear: 45, hemi: 1.25, sun: 1.35 },
+  evening: { sky: '#c79b6e', fogNear: 28, hemi: 0.85, sun: 0.9 },
+};
+
+export function rollAtmosphere(rng: RngStream, hasUmbrella: boolean): AtmosphereMods {
+  const timeOfDay = rng.weighted<TimeOfDay>(['morning', 'noon', 'evening'], [3, 3, 4]);
+  const weather = rng.weighted<Weather>(['clear', 'rain'], [7, 3]);
+  return {
+    timeOfDay,
+    weather,
+    staminaDrainMul: timeOfDay === 'noon' ? 1.3 : 1,
+    playerSpeedMul: weather === 'rain' && !hasUmbrella ? 0.88 : 1,
+    crowdDensityMul: timeOfDay === 'evening' ? 1.25 : 1,
+    agentWidthAdd: weather === 'rain' ? 0.12 : 0,
+  };
+}
+
+/** Applies sky/fog colors and adds rain particles. Returns a per-frame updater. */
+export function dressScene(
+  scene: Scene,
+  mods: AtmosphereMods,
+  followTarget: () => { x: number; z: number },
+): (frameDt: number) => void {
+  const pal = PALETTES[mods.timeOfDay];
+  const sky = new Color(pal.sky);
+  if (mods.weather === 'rain') sky.lerp(new Color('#7d848c'), 0.45);
+  scene.background = sky;
+  scene.fog = new Fog(sky, mods.weather === 'rain' ? pal.fogNear * 0.7 : pal.fogNear, 130);
+
+  if (mods.weather !== 'rain') return () => {};
+
+  // Rain: a recycling box of falling points around the player.
+  const COUNT = 600;
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * 60;
+    pos[i * 3 + 1] = Math.random() * 25;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 60;
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute('position', new BufferAttribute(pos, 3));
+  const rain = new Points(
+    geo,
+    new PointsMaterial({ color: 0xaabbcc, size: 0.08, transparent: true, opacity: 0.6 }),
+  );
+  rain.frustumCulled = false;
+  scene.add(rain);
+
+  return (frameDt: number) => {
+    const target = followTarget();
+    rain.position.set(target.x, 0, target.z);
+    const arr = geo.attributes.position!.array as Float32Array;
+    for (let i = 0; i < COUNT; i++) {
+      arr[i * 3 + 1]! -= 18 * frameDt;
+      if (arr[i * 3 + 1]! < 0) arr[i * 3 + 1] = 25;
+    }
+    geo.attributes.position!.needsUpdate = true;
+  };
+}
