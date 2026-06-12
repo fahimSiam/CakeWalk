@@ -13,6 +13,8 @@ import { ResultsState } from '@/states/ResultsState';
 import { RouteSelectState } from '@/states/RouteSelectState';
 import { MenuState } from '@/states/MenuState';
 import { createLocalServices } from '@/services';
+import { Soundscape } from '@/audio/Soundscape';
+import { setLang } from '@/i18n';
 
 const app = document.getElementById('app')!;
 const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -36,6 +38,7 @@ const ctx: GameContext = {
   debug: new DebugOverlay(renderer),
   input: new InputSystem(app),
   services: createLocalServices(save),
+  audio: new Soundscape(() => save.get().settings.audio),
   loopTimeScale: (scale) => {
     loop.timeScale = scale;
   },
@@ -47,6 +50,31 @@ ctx.machine.register('results', new ResultsState(ctx));
 ctx.machine.register('routeSelect', new RouteSelectState(ctx));
 ctx.machine.register('menu', new MenuState(ctx));
 
+// Adaptive resolution: drop pixelRatio when sustained frame time exceeds
+// budget (low-end Android floor), restore when there's headroom.
+let slowFrames = 0;
+let fastFrames = 0;
+const PR_STEPS = [2, 1.5, 1.25, 1];
+let prIndex = Math.min(window.devicePixelRatio, 2) >= 2 ? 0 : 1;
+
+function adaptResolution(frameDt: number): void {
+  if (frameDt > 0.022) {
+    slowFrames++;
+    fastFrames = 0;
+    if (slowFrames > 60 && prIndex < PR_STEPS.length - 1) {
+      renderer.setPixelRatio(PR_STEPS[++prIndex]!);
+      slowFrames = 0;
+    }
+  } else if (frameDt < 0.013) {
+    fastFrames++;
+    slowFrames = 0;
+    if (fastFrames > 600 && prIndex > 0) {
+      renderer.setPixelRatio(PR_STEPS[--prIndex]!);
+      fastFrames = 0;
+    }
+  }
+}
+
 const loop = new GameLoop({
   fixedUpdate(dt) {
     const t0 = performance.now();
@@ -56,6 +84,7 @@ const loop = new GameLoop({
   render(alpha, frameDt) {
     ctx.machine.render(alpha, frameDt);
     ctx.debug.frame(performance.now());
+    adaptResolution(frameDt);
   },
 });
 
@@ -85,6 +114,7 @@ window.__cakewalk = {
 
 void (async () => {
   await ctx.save.load();
+  setLang(ctx.save.get().settings.lang);
   const q = new URLSearchParams(location.search);
   const seed = Number(q.get('seed') ?? 1);
   if (q.has('graybox')) {

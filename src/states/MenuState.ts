@@ -15,6 +15,7 @@ import { AREA_ORDER, UNLOCK_COST, totalStars } from '@/economy/stars';
 import { SHOP_CATALOG, buyItem, dailyMissions, localDateKey } from '@/meta/progression';
 import { dailySeed, hashString } from '@/core/Rng';
 import { OSM_ATTRIBUTION } from '@/world/levelTypes';
+import { setLang } from '@/i18n';
 
 const AREA_NAMES: Record<string, { en: string; bn: string; flavor: string }> = {
   dhanmondi: { en: 'Dhanmondi', bn: 'ধানমন্ডি', flavor: 'Lakeside calm. Learn the streets.' },
@@ -34,6 +35,11 @@ export class MenuState implements GameState {
   enter(): void {
     const save = this.ctx.save.get();
     rechargeEnergy(save);
+    const skipFtue = new URLSearchParams(location.search).get('ftue') === '0';
+    if (!save.ftueDone && !skipFtue) {
+      void this.startTutorial();
+      return;
+    }
     this.build();
     this.timer = setInterval(() => {
       rechargeEnergy(this.ctx.save.get());
@@ -166,6 +172,23 @@ export class MenuState implements GameState {
     this.ctx.machine.transition('routeSelect', { areaId: id, seed });
   }
 
+  /** First launch: a gentle scripted Dhanmondi walk (unrated, free). */
+  private async startTutorial(): Promise<void> {
+    const { loadArea } = await import('@/world/levelStore');
+    const { RouteGraph } = await import('@/routing/RouteGraph');
+    const { Rng } = await import('@/core/Rng');
+    const area = await loadArea('dhanmondi');
+    const graph = new RouteGraph(area);
+    const rng = new Rng(7777).stream('route');
+    const { a, b } = graph.pickEndpoints(rng);
+    const route = graph.findRoutes(a, b)[0];
+    if (!route) {
+      this.build(); // degenerate fallback: skip tutorial
+      return;
+    }
+    this.ctx.machine.transition('run', { seed: 7777, area, route, tutorial: true });
+  }
+
   private startDaily(): void {
     // Daily ignores energy and locks — it's the shared world challenge.
     const seed = dailySeed();
@@ -246,6 +269,7 @@ export class MenuState implements GameState {
       </div>`;
     panel.querySelector('#cw-lang')!.addEventListener('click', () => {
       this.ctx.save.update((d) => (d.settings.lang = d.settings.lang === 'en' ? 'bn' : 'en'));
+      setLang(this.ctx.save.get().settings.lang);
       this.showSettings();
     });
     panel.querySelector('#cw-audio')!.addEventListener('click', () => {

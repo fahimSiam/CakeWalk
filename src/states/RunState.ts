@@ -47,6 +47,8 @@ import {
 } from '@/meta/progression';
 import { buildPersonGeometry } from '@/gfx/meshFactory';
 import { dressScene, rollAtmosphere, type AtmosphereMods } from '@/world/Atmosphere';
+import { t, tf } from '@/i18n';
+import { PmState } from '@/pickpocket/PickpocketSystem';
 
 const RUN_LENGTH = 500;
 const CORRIDOR_HALF_WIDTH = 3.2;
@@ -61,7 +63,20 @@ export interface RunParams {
   items?: string[];
   /** Daily Commute: Sand Watch disabled for leaderboard integrity. */
   daily?: boolean;
+  /** FTUE: scripted teaching beats, unrated, no energy cost. */
+  tutorial?: boolean;
 }
+
+/** Teaching beats by distance along the tutorial route (idea.md §9). */
+const TUTORIAL_STEPS: { at: number; key: import('@/i18n').LangKey }[] = [
+  { at: 8, key: 'tutDrift' },
+  { at: 45, key: 'tutDip' },
+  { at: 80, key: 'tutDuck' },
+  { at: 120, key: 'tutSprint' },
+  { at: 170, key: 'tutJump' },
+  { at: 230, key: 'tutCha' },
+];
+const TUTORIAL_THEFT_AT = 300;
 
 export class RunState implements GameState {
   private scene!: Scene;
@@ -109,6 +124,8 @@ export class RunState implements GameState {
   private ghostMesh: Mesh | null = null;
   private atmosphere!: AtmosphereMods;
   private atmosphereFrame: (frameDt: number) => void = () => {};
+  private tutorialStep = 0;
+  private tutorialTheftDone = false;
 
   constructor(private ctx: GameContext) {}
 
@@ -136,7 +153,8 @@ export class RunState implements GameState {
       this.ctx.save.get().ownedItems.includes('umbrella'),
     );
     this.crowd = new CrowdSystem(this.corridor, this.rng.stream('crowd'), this.bus);
-    if (p.density) this.crowd.config.density = p.density;
+    if (p.tutorial) this.crowd.config.density = 55;
+    else if (p.density) this.crowd.config.density = p.density;
     else if (p.route) {
       this.crowd.config.density = Math.min(
         190,
@@ -150,8 +168,11 @@ export class RunState implements GameState {
     this.pickpockets = new PickpocketSystem(this.rng.stream('pocketmar'), this.bus);
     this.pickpockets.config = {
       risk: p.route?.pickpocket ?? 2,
-      canSpawn: this.director.canSpawnPickpocket,
+      // Tutorial: no organic pocketmars — only the one scripted loss.
+      canSpawn: p.tutorial ? () => false : this.director.canSpawnPickpocket,
     };
+    this.tutorialStep = 0;
+    this.tutorialTheftDone = false;
     this.traffic = new TrafficSystem(this.rng.stream('traffic'), this.bus);
     this.traffic.setZones(this.buildCrossingZones());
     this.streetLife = new StreetLife(this.rng.stream('streetlife'), this.bus);
@@ -230,33 +251,36 @@ export class RunState implements GameState {
     this.bus.on('nearMiss', () => this.summary.nearMisses++);
     this.bus.on('theftSpotted', () => this.summary.spotted++);
 
-    this.bus.on('bump', () => this.hud.toast('ওহ! bumped', 0));
-    this.bus.on('cakewalkMeterFull', () => this.hud.toast('CAKEWALK! 2x points', 0));
-    this.bus.on('theft', (e) => this.hud.toast(`😱 pocketmar! -৳${e.amount}`, 0));
-    this.bus.on('theftSpotted', () => this.hud.toast('👀 Spotted! He melts away…', 0));
-    this.bus.on('stareMisread', () => this.hud.toast('😠 …that was just an uncle', 0));
-    this.bus.on('fruitGrabbed', () => this.hud.toast('🥭 +12', 0));
-    this.bus.on('catStumble', () => this.hud.toast('🐈 cat! combo lost', 0));
-    this.bus.on('dogBark', () => this.hud.toast('🐕 WOOF! panic!', 0));
-    this.bus.on('cowStampede', () => this.hud.toast('🐂🐂🐂 STAMPEDE! Get out of the way!', 0));
+    this.bus.on('bump', () => this.hud.toast(t('bumped'), 0));
+    this.bus.on('cakewalkMeterFull', () => this.hud.toast(t('cakewalk'), 0));
+    this.bus.on('theft', (e) => {
+      this.hud.toast(tf('theft', e.amount), 0);
+      if (this.params.tutorial && !this.tutorialTheftDone) {
+        this.tutorialTheftDone = true;
+        setTimeout(() => this.hud.toast(t('tutTheft'), 0), 1600);
+      }
+    });
+    this.bus.on('theftSpotted', () => this.hud.toast(t('spotted'), 0));
+    this.bus.on('stareMisread', () => this.hud.toast(t('misread'), 0));
+    this.bus.on('fruitGrabbed', () => this.hud.toast(t('fruit'), 0));
+    this.bus.on('catStumble', () => this.hud.toast(t('cat'), 0));
+    this.bus.on('dogBark', () => this.hud.toast(t('bark'), 0));
+    this.bus.on('cowStampede', () => this.hud.toast(t('stampede'), 0));
     this.bus.on('stampedeSurvived', (e) => {
       this.score.add(e.bonus, 'stampede');
-      this.hud.toast(`🐂 survived the stampede! +৳${e.bonus}`, 0);
+      this.hud.toast(tf('stampedeSurvived', e.bonus), 0);
     });
-    this.bus.on('vehicleHit', (e) => this.hud.toast(`🚌 hit by ${e.vehicleKind}!`, 0));
+    this.bus.on('vehicleHit', (e) => this.hud.toast(tf('vehicleHit', e.vehicleKind), 0));
     this.bus.on('crossingResolved', (e) =>
-      this.hud.toast(e.method === 'direct' ? `🎉 crossed! +৳${e.bonus}` : '🌉 safe & slow', 0),
+      this.hud.toast(e.method === 'direct' ? tf('crossed', e.bonus) : t('overbridge'), 0),
     );
     this.bus.on('microEvent', (e) =>
       this.hud.toast(
-        e.kind === 'hawkerPitch'
-          ? '🧺 "Mama, eita nen!"'
-          : e.kind === 'directionsAsk'
-            ? '🗣 "Bhai, Gulistan kon dike?"'
-            : '☕ "Cha khaben?"',
+        e.kind === 'hawkerPitch' ? t('hawker') : e.kind === 'directionsAsk' ? t('directions') : t('teaOffer'),
         0,
       ),
     );
+    this.ctx.audio.startRun(this.bus, this.atmosphere.weather === 'rain');
     this.bus.on('phoneCheckStarted', () => {
       if (this.params.area && this.params.route) {
         this.corridor.toWorld(this.player.s, this.player.t, this.pose);
@@ -333,6 +357,7 @@ export class RunState implements GameState {
 
   exit(): void {
     this.ctx.loopTimeScale(1);
+    this.ctx.audio.stopRun();
     this.reviveOverlay?.remove();
     this.reviveOverlay = null;
     if (this.ghostMesh) {
@@ -400,6 +425,7 @@ export class RunState implements GameState {
     this.pickpockets.fixedUpdate(dt, this.player, this.score, this.corridor.halfWidth(this.player.s));
     this.streetLife.fixedUpdate(dt, this.player, this.crowd);
     this.interactions.fixedUpdate(dt, this.player, this.score);
+    this.updateTutorial();
     this.director.fixedUpdate(dt, this.player);
     if (this.director.stampedeRequested) {
       this.director.stampedeRequested = false;
@@ -425,6 +451,28 @@ export class RunState implements GameState {
     else if (this.player.health <= 0) {
       if (!this.reviveUsed && !this.params.daily) this.offerRevive();
       else this.finish(false);
+    }
+  }
+
+  /** Scripted FTUE beats (idea.md §9): teach by distance, one staged theft. */
+  private updateTutorial(): void {
+    if (!this.params.tutorial) return;
+    const step = TUTORIAL_STEPS[this.tutorialStep];
+    if (step && this.player.s >= step.at) {
+      this.tutorialStep++;
+      this.hud.toast(t(step.key), 0);
+    }
+    // The staged first theft: small, survivable, immediately explained.
+    if (!this.tutorialTheftDone && this.player.s >= TUTORIAL_THEFT_AT && this.score.taka > 20) {
+      this.pickpockets.state[0] = PmState.Striking;
+      this.pickpockets.s[0] = this.player.s + 2;
+      this.pickpockets.t[0] = this.player.t;
+      this.pickpockets.innocent[0] = 0;
+      this.pickpockets.suspicion[0] = 1;
+    }
+    if (this.player.s >= this.runLength - 15 && this.tutorialStep === TUTORIAL_STEPS.length) {
+      this.tutorialStep++;
+      this.hud.toast(t('tutDone'), 0);
     }
   }
 
@@ -516,6 +564,10 @@ export class RunState implements GameState {
     this.finished = true;
     this.bus.emit('runFinished', { success });
     this.bus.flush();
+    if (this.params.tutorial && success) {
+      this.ctx.save.update((d) => (d.ftueDone = true));
+      void this.ctx.save.flush();
+    }
     // Persist the daily ghost if this run beat the stored one.
     if (this.params.daily && success) {
       const board = `daily-${localDateKey()}`;

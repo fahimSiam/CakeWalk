@@ -45,7 +45,8 @@ export class ResultsState implements GameState {
       missionTaka = applyRunToMissions(save, r.summary);
       save.taka += missionTaka;
       touchStreak(save);
-      if (r.runParams.route && areaId && !r.runParams.daily) {
+      // Tutorial runs are unrated (idea.md §4 ruling).
+      if (r.runParams.route && areaId && !r.runParams.daily && !r.runParams.tutorial) {
         stars = rateRun(r, r.runParams.route);
         save.stars[areaId] = Math.max(save.stars[areaId] ?? 0, stars.total);
       }

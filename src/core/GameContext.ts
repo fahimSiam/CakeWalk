@@ -8,6 +8,7 @@ import type { SaveSystem } from './SaveSystem';
 import type { DebugOverlay } from './DebugOverlay';
 import type { InputSystem } from '@/player/Input';
 import type { Services } from '@/services';
+import type { Soundscape } from '@/audio/Soundscape';
 
 export interface GameContext {
   renderer: WebGLRenderer;
@@ -17,6 +18,7 @@ export interface GameContext {
   debug: DebugOverlay;
   input: InputSystem;
   services: Services;
+  audio: Soundscape;
   /** Scale the loop's sim time (slow-mo); 1 = normal. */
   loopTimeScale: (scale: number) => void;
   /** Mutable bag exposed on window.__cakewalk for Playwright/dev tooling. */

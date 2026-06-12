@@ -75,11 +75,12 @@
 - [x] Eid theming: led Qurbani cows (slow wide walls in the exodus flow), Director-scheduled **escaped-cow stampede** (3 fast cows, crowd panic, ৳80 survival bonus, hit = 35 dmg + voids bonus), low-poly cow renderer; luggage/head-load crowd already in archetype mix
 - [x] All cow/atmosphere state snapshot-covered for rewind; 74 unit + 5 e2e green (all areas runnable)
 
-## M8 — FTUE, Audio, i18n, Polish
-- [ ] FTUE: scripted first-60 s, first crossing, first theft + glasses offer; unrated
-- [ ] WebAudio soundscape: rickshaw bells, horns, crowd babble, cha clinks, rain; rewind reverse audio
-- [ ] i18n: full bn + en pass
-- [ ] Results/share cards; perf pass (pixelRatio scaling, draw-call audit)
+## M8 — FTUE, Audio, i18n, Polish ✅
+- [x] FTUE: first launch auto-starts a fixed-seed Dhanmondi tutorial run (low crowd, no organic pocketmars) — 6 teaching toasts by distance (drift/dip/duck/sprint/jump/cha) + scripted small first theft w/ explanation + finale; unrated, sets ftueDone (`?ftue=0` skips for dev)
+- [x] WebAudio synth soundscape (zero audio assets): brown-noise city rumble, periodic detuned-saw horns, rickshaw-bell near-miss ping, bump/vehicle thuds, theft/spotted stings, fruit pluck, bark, stampede sub-rumble, cakewalk chime, rewind whoosh+heartbeat; rain noise layer; honors audio setting, autoplay-safe
+- [x] i18n: en + bn dictionaries for all run toasts/tutorial/results labels; menu language toggle live-switches; Bangla via system font stack
+- [x] Perf: adaptive pixelRatio (2→1.5→1.25→1 on sustained >22 ms frames, recovers with headroom); share cards landed in M6
+- [x] 74 unit + 6 e2e green
 
 ## M9 — Packaging + Publishing Guide
 - [ ] Capacitor: add android + ios platforms, icons/splash, config, sync

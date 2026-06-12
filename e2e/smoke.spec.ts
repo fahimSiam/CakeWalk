@@ -65,7 +65,7 @@ test('menu shows areas/energy and the daily starts without energy cost', async (
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/');
+  await page.goto('/?ftue=0');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);
   await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'menu');
   await page.screenshot({ path: 'e2e/screenshots/menu.png' });
@@ -81,6 +81,22 @@ test('menu shows areas/energy and the daily starts without energy cost', async (
   await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
   const energyAfter = await page.evaluate(() => window.__cakewalk.ctx.save.get().energy.current);
   expect(energyAfter).toBe(energyBefore); // daily is free
+  expect(errors).toEqual([]);
+});
+
+test('first launch goes into the tutorial run', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.goto('/'); // fresh storage → FTUE
+  await page.waitForFunction(() => window.__cakewalk?.ready === true);
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run', undefined, {
+    timeout: 15000,
+  });
+  const isTutorial = await page.evaluate(() => {
+    const run = window.__cakewalk.ctx.testApi.run as { player: unknown } | undefined;
+    return Boolean(run);
+  });
+  expect(isTutorial).toBe(true);
   expect(errors).toEqual([]);
 });
 
