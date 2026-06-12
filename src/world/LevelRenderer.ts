@@ -50,8 +50,10 @@ export interface PlacedProp {
 export class LevelRenderer {
   readonly group = new Group();
   readonly props: PlacedProp[] = [];
+  readonly routeRef: Vec2[];
 
   constructor(scene: Scene, area: BakedArea, routePts: Vec2[]) {
+    this.routeRef = routePts;
     const near = makeRouteDistance(routePts);
 
     this.addGround(routePts);
@@ -197,6 +199,75 @@ export class LevelRenderer {
     instanced(byKind.get('dustbin') ?? [], dustbinGeometry());
     instanced(byKind.get('chaDokan') ?? [], chaDokanGeometry());
     instanced(byKind.get('busStop') ?? [], busStopGeometry());
+    this.addStreetClutter(this.routeRef);
+  }
+
+  /**
+   * Deterministic street clutter beside the walking line so Dhaka never
+   * feels empty: parked rickshaws (~45 m) and utility poles (~28 m),
+   * alternating sides, offset just past the corridor edge.
+   */
+  private addStreetClutter(route: Vec2[]): void {
+    const rickshaws: { pos: Vec2; angle: number }[] = [];
+    const poles: { pos: Vec2; angle: number }[] = [];
+    walkAlong(route, 45, 17, (pos, normal, k) => {
+      const side = k % 2 === 0 ? 1 : -1;
+      rickshaws.push({
+        pos: [pos[0] + normal[0] * 4.3 * side, pos[1] + normal[1] * 4.3 * side],
+        angle: Math.atan2(normal[0], normal[1]) + (side > 0 ? 0.4 : -0.4),
+      });
+    });
+    walkAlong(route, 28, 9, (pos, normal, k) => {
+      const side = k % 2 === 0 ? -1 : 1;
+      poles.push({
+        pos: [pos[0] + normal[0] * 3.6 * side, pos[1] + normal[1] * 3.6 * side],
+        angle: 0,
+      });
+    });
+
+    const place = (items: { pos: Vec2; angle: number }[], geo: BufferGeometry): void => {
+      if (!items.length) return;
+      const mesh = new InstancedMesh(
+        geo,
+        new MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+        items.length,
+      );
+      const m = new Matrix4();
+      const q = new Quaternion();
+      items.forEach((it, i) => {
+        q.setFromAxisAngle(new Vector3(0, 1, 0), it.angle);
+        m.compose(new Vector3(it.pos[0], 0, it.pos[1]), q, new Vector3(1, 1, 1));
+        mesh.setMatrixAt(i, m);
+      });
+      this.group.add(mesh);
+    };
+    place(rickshaws, parkedRickshawGeometry());
+    place(poles, utilityPoleGeometry());
+  }
+}
+
+/** Walk a polyline emitting a point+normal every `spacing` meters. */
+function walkAlong(
+  pts: Vec2[],
+  spacing: number,
+  phase: number,
+  emit: (pos: Vec2, normal: Vec2, index: number) => void,
+): void {
+  let acc = -phase;
+  let k = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!;
+    const b = pts[i]!;
+    const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (segLen < 0.01) continue;
+    const dx = (b[0] - a[0]) / segLen;
+    const dz = (b[1] - a[1]) / segLen;
+    let d = spacing - ((acc % spacing) + spacing) % spacing;
+    while (d <= segLen) {
+      emit([a[0] + dx * d, a[1] + dz * d], [-dz, dx], k++);
+      d += spacing;
+    }
+    acc += segLen;
   }
 }
 
@@ -324,6 +395,46 @@ function chaDokanGeometry(): BufferGeometry {
   bench.translate(0, 0.18, 1.35);
   const benchG = paintColored(bench, new Color('#7a5c3a'));
   return mergeGeometries([stallG, awningG, benchG], false);
+}
+
+function parkedRickshawGeometry(): BufferGeometry {
+  const body = new BoxGeometry(0.9, 0.5, 1.6);
+  body.translate(0, 0.55, 0);
+  const seat = new BoxGeometry(0.85, 0.45, 0.6);
+  seat.translate(0, 1.0, -0.4);
+  const canopy = new BoxGeometry(0.95, 0.08, 0.8);
+  canopy.translate(0, 1.55, -0.35);
+  const wheelL = new BoxGeometry(0.08, 0.7, 0.7);
+  wheelL.translate(-0.48, 0.35, -0.3);
+  const wheelR = new BoxGeometry(0.08, 0.7, 0.7);
+  wheelR.translate(0.48, 0.35, -0.3);
+  return mergeGeometries(
+    [
+      paintColored(body, new Color('#3a6fb5')),
+      paintColored(seat, new Color('#b03a4a')),
+      paintColored(canopy, new Color('#e0c46a')),
+      paintColored(wheelL, new Color('#2a2a2a')),
+      paintColored(wheelR, new Color('#2a2a2a')),
+    ],
+    false,
+  );
+}
+
+function utilityPoleGeometry(): BufferGeometry {
+  const pole = new CylinderGeometry(0.09, 0.12, 6.5, 5);
+  pole.translate(0, 3.25, 0);
+  const crossarm = new BoxGeometry(1.6, 0.08, 0.08);
+  crossarm.translate(0, 5.9, 0);
+  const crossarm2 = new BoxGeometry(1.2, 0.08, 0.08);
+  crossarm2.translate(0, 5.4, 0);
+  return mergeGeometries(
+    [
+      paintColored(pole, new Color('#6e655a')),
+      paintColored(crossarm, new Color('#4a443c')),
+      paintColored(crossarm2, new Color('#4a443c')),
+    ],
+    false,
+  );
 }
 
 function busStopGeometry(): BufferGeometry {

@@ -46,7 +46,9 @@ export class SimulatedAds implements IAds {
         <div style="font-weight:800;font-size:20px">Ad break (${placement})</div>
         <div style="opacity:.7;font-size:13px">simulated rewarded ad — real AdMob slots in here</div>
         <button id="cw-ad-done" disabled style="margin-top:10px;font-size:17px;padding:10px 30px;border-radius:10px;border:none;
-          background:#555;color:#fff;font-weight:700">5</button>`;
+          background:#555;color:#fff;font-weight:700">5</button>
+        <button id="cw-ad-cancel" style="font-size:13px;padding:6px 16px;border-radius:8px;border:none;
+          background:rgba(255,255,255,.12);color:#aaa">✕ cancel (no reward)</button>`;
       document.body.appendChild(el);
       const btn = el.querySelector<HTMLButtonElement>('#cw-ad-done')!;
       let left = 5;
@@ -61,8 +63,14 @@ export class SimulatedAds implements IAds {
         }
       }, 1000);
       btn.addEventListener('click', () => {
+        clearInterval(tick);
         el.remove();
         resolve(true);
+      });
+      el.querySelector('#cw-ad-cancel')!.addEventListener('click', () => {
+        clearInterval(tick);
+        el.remove();
+        resolve(false); // mirrors real AdMob's not-earned callback
       });
     });
   }

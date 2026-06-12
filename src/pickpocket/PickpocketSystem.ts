@@ -118,8 +118,9 @@ export class PickpocketSystem {
           this.suspicion[i] = 1;
           if (Math.abs(this.s[i]! - player.s) < STRIKE_RANGE && Math.abs(this.t[i]! - player.t) < STRIKE_RANGE) {
             const fraction = player.phoneLocked ? PHONE_STEAL_FRACTION : WALK_STEAL_FRACTION;
-            const amount = Math.floor(score.taka * fraction);
-            score.steal(Math.max(amount, Math.min(10, score.taka)), player.phoneLocked ? 'phone' : 'walk');
+            // At least 1 taka if there's anything to take, never above the cap.
+            const amount = Math.max(Math.min(1, score.taka), Math.floor(score.taka * fraction));
+            score.steal(amount, player.phoneLocked ? 'phone' : 'walk');
             this.state[i] = PmState.Fleeing;
             this.timer[i] = 3;
           }

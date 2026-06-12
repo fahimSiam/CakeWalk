@@ -46,9 +46,10 @@ import {
   type RunSummary,
 } from '@/meta/progression';
 import { buildPersonGeometry } from '@/gfx/meshFactory';
-import { dressScene, rollAtmosphere, type AtmosphereMods } from '@/world/Atmosphere';
+import { dressScene, rollAtmosphere, type AtmosphereHandle, type AtmosphereMods } from '@/world/Atmosphere';
 import { t, tf } from '@/i18n';
 import { PmState } from '@/pickpocket/PickpocketSystem';
+import { totalStars } from '@/economy/stars';
 
 const RUN_LENGTH = 500;
 const CORRIDOR_HALF_WIDTH = 3.2;
@@ -123,9 +124,12 @@ export class RunState implements GameState {
   private ghostBest: { s: number; t: number }[] = [];
   private ghostMesh: Mesh | null = null;
   private atmosphere!: AtmosphereMods;
-  private atmosphereFrame: (frameDt: number) => void = () => {};
+  private atmosphereHandle: AtmosphereHandle = { frame: () => {}, dispose: () => {} };
+  /** Scene-local resources (graybox planes, finish gate) disposed on exit. */
+  private ownedResources: { geometry?: { dispose(): void }; material?: { dispose(): void } }[] = [];
   private tutorialStep = 0;
   private tutorialTheftDone = false;
+  private tutorialTheftStaged = false;
 
   constructor(private ctx: GameContext) {}
 
@@ -153,12 +157,14 @@ export class RunState implements GameState {
       this.ctx.save.get().ownedItems.includes('umbrella'),
     );
     this.crowd = new CrowdSystem(this.corridor, this.rng.stream('crowd'), this.bus);
-    if (p.tutorial) this.crowd.config.density = 55;
+    if (p.tutorial) this.crowd.config.density = 45;
     else if (p.density) this.crowd.config.density = p.density;
     else if (p.route) {
+      // Softer base curve + newcomer grace until the first 5 stars are earned.
+      const newcomer = totalStars(this.ctx.save.get().stars) < 5 ? 0.7 : 1;
       this.crowd.config.density = Math.min(
-        190,
-        Math.round((60 + p.route.crowd * 26) * this.atmosphere.crowdDensityMul),
+        170,
+        Math.round((30 + p.route.crowd * 22) * this.atmosphere.crowdDensityMul * newcomer),
       );
     }
     this.crowd.config.widthAdd = this.atmosphere.agentWidthAdd;
@@ -173,6 +179,7 @@ export class RunState implements GameState {
     };
     this.tutorialStep = 0;
     this.tutorialTheftDone = false;
+    this.tutorialTheftStaged = false;
     this.traffic = new TrafficSystem(this.rng.stream('traffic'), this.bus);
     this.traffic.setZones(this.buildCrossingZones());
     this.streetLife = new StreetLife(this.rng.stream('streetlife'), this.bus);
@@ -197,7 +204,30 @@ export class RunState implements GameState {
         names.forEach((n, i) => this.rng.stream(n).setState(from[off + i]!));
       },
     };
+    // Mission stats + clock must rewind too, or re-walked seconds double-count
+    // mission progress and inflate the pace-star time.
+    const summarySnapshot: Snapshottable = {
+      snapshot: (out, off) => {
+        out[off] = this.summary.chaCups;
+        out[off + 1] = this.summary.fruits;
+        out[off + 2] = this.summary.directCrossings;
+        out[off + 3] = this.summary.nearMisses;
+        out[off + 4] = this.summary.spotted;
+        out[off + 5] = this.summary.distanceM;
+        out[off + 6] = this.elapsed;
+      },
+      restore: (from, off) => {
+        this.summary.chaCups = from[off]!;
+        this.summary.fruits = from[off + 1]!;
+        this.summary.directCrossings = from[off + 2]!;
+        this.summary.nearMisses = from[off + 3]!;
+        this.summary.spotted = from[off + 4]!;
+        this.summary.distanceM = from[off + 5]!;
+        this.elapsed = from[off + 6]!;
+      },
+    };
     const buffer = new RewindBuffer([
+      { sys: summarySnapshot, floats: 7 },
       { sys: this.player, floats: Player.SNAP_FLOATS },
       { sys: this.crowd, floats: CrowdSystem.SNAP_FLOATS },
       { sys: this.pickpockets, floats: PickpocketSystem.SNAP_FLOATS },
@@ -243,6 +273,7 @@ export class RunState implements GameState {
     // Mission/summary counters.
     this.bus.on('restStarted', (e) => {
       if (e.kind === 'chaDokan') this.summary.chaCups++;
+      this.ctx.audio.sip();
     });
     this.bus.on('fruitGrabbed', () => this.summary.fruits++);
     this.bus.on('crossingResolved', (e) => {
@@ -375,8 +406,24 @@ export class RunState implements GameState {
     this.lifeRenderer.dispose(this.scene);
     this.level?.dispose(this.scene);
     this.level = null;
+    this.atmosphereHandle.dispose();
+    // Graybox planes / finish gate / anything buildScene created directly.
+    for (const r of this.ownedResources) {
+      r.geometry?.dispose();
+      r.material?.dispose();
+    }
+    this.ownedResources = [];
     this.scene.clear();
     delete this.ctx.testApi.run;
+  }
+
+  /** Register a mesh whose geometry/material this state must dispose. */
+  private own<T extends Mesh>(mesh: T): T {
+    this.ownedResources.push({
+      geometry: mesh.geometry,
+      material: Array.isArray(mesh.material) ? undefined : mesh.material,
+    });
+    return mesh;
   }
 
   fixedUpdate(dt: number): void {
@@ -412,6 +459,9 @@ export class RunState implements GameState {
     }
 
     // Edge-triggered context actions before movement.
+    if (input.jump && !this.player.jumping && !this.player.resting && !this.player.phoneLocked) {
+      this.ctx.audio.jump();
+    }
     if (input.stare) this.pickpockets.stare(this.player, this.score);
     if (input.sit) this.interactions.toggleSit(this.player);
     if (input.phone) this.interactions.togglePhone(this.player);
@@ -463,7 +513,15 @@ export class RunState implements GameState {
       this.hud.toast(t(step.key), 0);
     }
     // The staged first theft: small, survivable, immediately explained.
-    if (!this.tutorialTheftDone && this.player.s >= TUTORIAL_THEFT_AT && this.score.taka > 20) {
+    // Staged ONCE — re-staging every tick would pin the thief out of strike
+    // range forever and the lesson would never fire.
+    if (
+      !this.tutorialTheftStaged &&
+      !this.tutorialTheftDone &&
+      this.player.s >= TUTORIAL_THEFT_AT &&
+      this.score.taka > 20
+    ) {
+      this.tutorialTheftStaged = true;
       this.pickpockets.state[0] = PmState.Striking;
       this.pickpockets.s[0] = this.player.s + 2;
       this.pickpockets.t[0] = this.player.t;
@@ -552,7 +610,7 @@ export class RunState implements GameState {
     );
     this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
     this.rewindFx.frame(frameDt);
-    this.atmosphereFrame(frameDt);
+    this.atmosphereHandle.frame(frameDt);
     if (this.player.phoneLocked && this.params.area && this.params.route) {
       this.phoneOverlay.updatePosition(this.params.area, this.params.route.pts, this.pose.x, this.pose.z);
     }
@@ -631,7 +689,7 @@ export class RunState implements GameState {
     sun.position.set(-30, 60, -20);
     this.scene.add(sun);
     // Time-of-day & weather overrides + rain updater.
-    this.atmosphereFrame = dressScene(this.scene, this.atmosphere, () => ({
+    this.atmosphereHandle = dressScene(this.scene, this.atmosphere, () => ({
       x: this.pose.x,
       z: this.pose.z,
     }));
@@ -641,9 +699,11 @@ export class RunState implements GameState {
       this.level = new LevelRenderer(this.scene, this.params.area, this.params.route.pts);
       const end: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
       this.corridor.toWorld(this.runLength, 0, end);
-      const gate = new Mesh(
-        new BoxGeometry(6, 4, 0.5),
-        new MeshLambertMaterial({ color: '#3fa34d', flatShading: true }),
+      const gate = this.own(
+        new Mesh(
+          new BoxGeometry(6, 4, 0.5),
+          new MeshLambertMaterial({ color: '#3fa34d', flatShading: true }),
+        ),
       );
       gate.position.set(end.x, 2, end.z);
       gate.rotation.y = Math.atan2(end.dirX, end.dirZ);
@@ -653,18 +713,22 @@ export class RunState implements GameState {
 
     // Graybox fallback (tests, control spikes).
     // Footpath ribbon.
-    const path = new Mesh(
-      new PlaneGeometry(CORRIDOR_HALF_WIDTH * 2, RUN_LENGTH + 120),
-      new MeshLambertMaterial({ color: '#9b9484' }),
+    const path = this.own(
+      new Mesh(
+        new PlaneGeometry(CORRIDOR_HALF_WIDTH * 2, RUN_LENGTH + 120),
+        new MeshLambertMaterial({ color: '#9b9484' }),
+      ),
     );
     path.rotation.x = -Math.PI / 2;
     path.position.set(0, 0, -(RUN_LENGTH + 120) / 2 + 30);
     this.scene.add(path);
 
     // Road strip beside the footpath (visual context).
-    const road = new Mesh(
-      new PlaneGeometry(8, RUN_LENGTH + 120),
-      new MeshLambertMaterial({ color: '#55524c' }),
+    const road = this.own(
+      new Mesh(
+        new PlaneGeometry(8, RUN_LENGTH + 120),
+        new MeshLambertMaterial({ color: '#55524c' }),
+      ),
     );
     road.rotation.x = -Math.PI / 2;
     road.position.set(CORRIDOR_HALF_WIDTH + 4.2, -0.02, -(RUN_LENGTH + 120) / 2 + 30);
@@ -673,6 +737,7 @@ export class RunState implements GameState {
     // Graybox "buildings" wall on the left, motion-reference pillars.
     const buildingMat = new MeshLambertMaterial({ color: '#8a7f6f', flatShading: true });
     const buildingGeo = new BoxGeometry(4, 1, 10);
+    this.ownedResources.push({ geometry: buildingGeo, material: buildingMat });
     const rng = this.rng.stream('scenery');
     for (let z = 0; z < RUN_LENGTH + 60; z += 11) {
       const h = rng.range(5, 16);
@@ -683,9 +748,11 @@ export class RunState implements GameState {
     }
 
     // Finish gate.
-    const gate = new Mesh(
-      new BoxGeometry(CORRIDOR_HALF_WIDTH * 2 + 1, 4, 0.5),
-      new MeshLambertMaterial({ color: '#3fa34d', flatShading: true }),
+    const gate = this.own(
+      new Mesh(
+        new BoxGeometry(CORRIDOR_HALF_WIDTH * 2 + 1, 4, 0.5),
+        new MeshLambertMaterial({ color: '#3fa34d', flatShading: true }),
+      ),
     );
     gate.position.set(0, 2, -RUN_LENGTH);
     this.scene.add(gate);

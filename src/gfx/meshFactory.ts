@@ -64,9 +64,14 @@ export function buildPersonGeometry(): BufferGeometry {
     parts.push({ geo, limbId, color, tinted });
   };
 
-  // Head + hair cap (limb 0 — bobs with torso).
+  // Head + hair cap (limb 0 — bobs with torso). Mesh forward is +Z.
   add(0.26, 0.26, 0.24, 0, 1.52, 0, 0, SKIN);
   add(0.28, 0.1, 0.26, 0, 1.69, -0.01, 0, HAIR);
+  // Face: eyes + mouth so people read as people, not blocks.
+  const EYE = new Color('#1d1d1d');
+  add(0.05, 0.05, 0.02, -0.06, 1.56, 0.125, 0, EYE);
+  add(0.05, 0.05, 0.02, 0.06, 1.56, 0.125, 0, EYE);
+  add(0.09, 0.025, 0.02, 0, 1.46, 0.125, 0, new Color('#7a4438'));
   // Torso (shirt — tinted).
   add(0.46, 0.55, 0.26, 0, 1.1, 0, 0, new Color('#ffffff'), true);
   // Legs: upper (pants), lower (pants darker = same), pivot at hip y≈0.82.

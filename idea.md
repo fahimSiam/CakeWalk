@@ -235,6 +235,14 @@ tools/osm/           # Build-time OSM fetch + bake pipeline
 
 ---
 
+## 9.1 Home Screen & Flow (user feedback, Rev 5)
+- **Home page** (always shown after the tutorial): big **▶ PLAY** button, **history** of recent runs (area, taka, stars, date), energy/streak/wallet, daily card, shop, missions, **controls guide** (touch + keyboard side by side), settings.
+- **Play flow**: PLAY → choose a **map** (area) → random A & B revealed on the area map → choose a route (connect-A-to-B puzzle with risk stats) → run starts.
+- **Gradual difficulty**: crowd density ramps over the first ~80 m of every run, and is globally eased until the player has earned 5⭐ (newcomer grace). Area tuning stays the long-term curve (Dhanmondi gentle → Gulistan chaos).
+- **Art**: low-poly people get **faces** (eyes + mouth, Sims-readable at a glance), not blank blocks.
+- **Roadside life**: denser synthesized props (trees/dustbins/cha dokans) + parked rickshaws and utility poles along the route so streets never feel empty.
+- **Sound**: every action gets a catchy synthesized sound (jump, sit/cha sip, button clicks, results jingle) on top of the event stings.
+
 ## 10. Resolved Decisions
 - **Camera**: third-person 3D (Subway Surfers-style chase cam), low-poly stylized.
 - **Energy vs. retry**: free retries, energy gates new runs (§5); **generous** starting tune.

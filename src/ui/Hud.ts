@@ -73,9 +73,13 @@ export class Hud {
       const el = this.root.querySelector<HTMLButtonElement>(selector)!;
       el.addEventListener('touchstart', (e) => {
         e.stopPropagation();
+        // Without preventDefault the browser synthesizes a `click` on finger
+        // lift and every edge-triggered action fires twice (sit → instantly
+        // stand, phone → instantly cancel).
+        e.preventDefault();
         fn();
       });
-      el.addEventListener('click', fn);
+      el.addEventListener('click', fn); // mouse/keyboard path
       return el;
     };
     bind('.cw-btn-stare', () => input.pressStare());

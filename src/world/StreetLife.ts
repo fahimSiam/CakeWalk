@@ -72,11 +72,12 @@ export class StreetLife {
   }
 
   fixedUpdate(dt: number, player: Player, crowd: CrowdSystem): void {
+    const airborne = player.y > 1.2; // on the overbridge — street can't touch you
     // Dogs: low obstacle (jump clears); sprinting close startles → bark panic.
     for (const dog of this.dogs) {
       const ds = Math.abs(player.s - dog.s);
       const dtt = Math.abs(player.t - dog.t);
-      if (ds < 0.6 && dtt < 0.55 && !player.jumping) {
+      if (ds < 0.6 && dtt < 0.55 && !player.jumping && !airborne) {
         if (player.applyBump(4)) this.bus.emit('bump', { severity: 4, agentIndex: -1 });
       }
       if (!dog.barked && ds < 2.2 && dtt < 2 && player.speed > SPEED_WALK + 0.5) {
@@ -91,7 +92,7 @@ export class StreetLife {
       // Static obstacle for the player too.
       const ds = Math.abs(player.s - bin.s);
       const dtt = Math.abs(player.t - bin.t);
-      if (ds < 0.6 && dtt < 0.6 && !player.jumping) {
+      if (ds < 0.6 && dtt < 0.6 && !player.jumping && !airborne) {
         if (player.applyBump(3)) this.bus.emit('bump', { severity: 3, agentIndex: -1 });
       }
       if (!bin.smelly) continue;
@@ -113,7 +114,7 @@ export class StreetLife {
         this.catActive[i] = 0;
         continue;
       }
-      if (Math.abs(player.s - this.catS[i]!) < 0.5 && Math.abs(player.t - this.catT[i]!) < 0.45 && !player.jumping) {
+      if (Math.abs(player.s - this.catS[i]!) < 0.5 && Math.abs(player.t - this.catT[i]!) < 0.45 && !player.jumping && !airborne) {
         this.catActive[i] = 0;
         this.bus.emit('catStumble', {});
       }
@@ -166,8 +167,10 @@ export class StreetLife {
         stampedeStillRunning = stampedeStillRunning || this.cowS[i]! > player.s - 5;
         crowd.repelFrom(this.cowS[i]!, this.cowT[i]!, 3.5, 4 * dt);
       }
-      // A cow is a wall: jump doesn't clear it, duck doesn't either.
+      // A cow is a wall: jump doesn't clear it, duck doesn't either —
+      // but the overbridge does.
       if (
+        player.y <= 1.2 &&
         Math.abs(player.s - this.cowS[i]!) < 1.3 &&
         Math.abs(player.t - this.cowT[i]!) < 1.15
       ) {

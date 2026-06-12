@@ -87,19 +87,30 @@ export class MenuState implements GameState {
       <div id="cw-energy" style="margin:14px 0;padding:10px 14px;background:rgba(255,255,255,.07);border-radius:12px;
         display:flex;justify-content:space-between;align-items:center"></div>
 
+      <button id="cw-play" style="width:100%;border:none;border-radius:16px;padding:18px;margin-bottom:12px;
+        background:linear-gradient(135deg,#e8a33d,#d18a26);color:#1a1208;font-family:inherit;
+        font-size:24px;font-weight:900;letter-spacing:1px;box-shadow:0 6px 18px rgba(232,163,61,.25)">
+        ▶ PLAY
+      </button>
+
       <button id="cw-daily" style="width:100%;text-align:left;border:2px solid #5b9fd6;border-radius:14px;padding:12px 14px;
         background:rgba(91,159,214,.12);color:#fff;font-family:inherit;margin-bottom:14px">
         <div style="font-weight:900;font-size:17px">📅 Ajker Rasta <span style="opacity:.6;font-size:12px">(today's route)</span></div>
         <div style="font-size:12px;opacity:.8">${dailyDone ? `Done today: ৳${save.dailyResults[dateKey]!.taka} · ${save.dailyResults[dateKey]!.stars}⭐ — come back tomorrow!` : 'Same route for everyone, one attempt, no Sand Watch. Beat the world.'}</div>
       </button>
 
-      <div style="font-weight:800;margin-bottom:8px">Areas <span style="opacity:.6;font-size:13px">· ${stars}⭐ collected</span></div>
-      <div id="cw-areas" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+      <div id="cw-areas-wrap" style="display:none">
+        <div style="font-weight:800;margin-bottom:8px">Choose your map <span style="opacity:.6;font-size:13px">· ${stars}⭐ collected</span></div>
+        <div id="cw-areas" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+        <div style="font-size:11px;opacity:.55;margin-top:6px">Pick a map → you'll get a random start & destination → choose your route.</div>
+      </div>
 
-      <div style="display:flex;gap:10px;margin-top:16px">
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
         <button class="cw-menu-btn" id="cw-shop">🛍 Shop</button>
         <button class="cw-menu-btn" id="cw-missions">📋 Missions</button>
-        <button class="cw-menu-btn" id="cw-settings">⚙️</button>
+        <button class="cw-menu-btn" id="cw-history">🕘 History</button>
+        <button class="cw-menu-btn" id="cw-controls">🕹 Controls</button>
+        <button class="cw-menu-btn" id="cw-settings" style="flex:0 0 56px">⚙️</button>
       </div>
       <div id="cw-panel"></div>
       <style>
@@ -130,13 +141,26 @@ export class MenuState implements GameState {
       areas.appendChild(btn);
     }
 
-    this.root.querySelector('#cw-daily')!.addEventListener('click', () => {
+    const click = (id: string, fn: () => void): void => {
+      this.root!.querySelector(id)!.addEventListener('click', () => {
+        this.ctx.audio.uiClick();
+        fn();
+      });
+    };
+    click('#cw-play', () => {
+      const wrap = this.root!.querySelector<HTMLDivElement>('#cw-areas-wrap')!;
+      wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+      wrap.scrollIntoView({ behavior: 'smooth' });
+    });
+    click('#cw-daily', () => {
       if (!dailyDone) this.startDaily();
     });
-    this.root.querySelector('#cw-shop')!.addEventListener('click', () => this.showShop());
-    this.root.querySelector('#cw-missions')!.addEventListener('click', () => this.showMissions());
-    this.root.querySelector('#cw-settings')!.addEventListener('click', () => this.showSettings());
-    this.root.querySelector('#cw-energy')!.addEventListener('click', () => void this.adRefill());
+    click('#cw-shop', () => this.showShop());
+    click('#cw-missions', () => this.showMissions());
+    click('#cw-history', () => this.showHistory());
+    click('#cw-controls', () => this.showControls());
+    click('#cw-settings', () => this.showSettings());
+    click('#cw-energy', () => void this.adRefill());
   }
 
   private refreshEnergy(): void {
@@ -251,6 +275,63 @@ export class MenuState implements GameState {
         <div style="font-size:11px;opacity:.6">${m.textBn} · ${Math.min(progress, m.target)}/${m.target}</div>`;
       panel.appendChild(row);
     }
+  }
+
+  private showHistory(): void {
+    const save = this.ctx.save.get();
+    const panel = this.root!.querySelector<HTMLDivElement>('#cw-panel')!;
+    panel.innerHTML = `<div style="margin-top:14px;font-weight:800">Recent walks</div>`;
+    if (save.recentRuns.length === 0) {
+      panel.innerHTML += `<div style="padding:14px;opacity:.6;font-size:13px">No walks yet — hit ▶ PLAY!</div>`;
+      return;
+    }
+    for (const run of save.recentRuns) {
+      const row = document.createElement('div');
+      row.style.cssText =
+        'display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:10px;' +
+        'background:rgba(255,255,255,.06);margin-top:8px;font-size:13px';
+      row.innerHTML = `
+        <div>
+          <div style="font-weight:700">${run.success ? '🏠' : '💥'} ${AREA_NAMES[run.area]?.en ?? run.area}</div>
+          <div style="opacity:.6;font-size:11px">${run.date} · ${run.distance} m</div>
+        </div>
+        <div style="text-align:right">
+          <div style="color:#ffd34a;font-weight:800">৳${run.taka}</div>
+          <div style="font-size:11px;color:#ffd34a">${'★'.repeat(run.stars)}${'☆'.repeat(Math.max(0, 5 - run.stars))}</div>
+        </div>`;
+      panel.appendChild(row);
+    }
+  }
+
+  private showControls(): void {
+    const panel = this.root!.querySelector<HTMLDivElement>('#cw-panel')!;
+    const row = (action: string, touch: string, key: string): string =>
+      `<tr><td style="padding:5px 8px;font-weight:600">${action}</td>
+       <td style="padding:5px 8px;opacity:.85">${touch}</td>
+       <td style="padding:5px 8px;opacity:.85"><code>${key}</code></td></tr>`;
+    panel.innerHTML = `
+      <div style="margin-top:14px;font-weight:800">Controls</div>
+      <div style="padding:8px;border-radius:10px;background:rgba(255,255,255,.06);margin-top:8px;overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <tr style="opacity:.55;font-size:11px"><th style="text-align:left;padding:5px 8px">Action</th>
+            <th style="text-align:left;padding:5px 8px">📱 Touch</th><th style="text-align:left;padding:5px 8px">⌨️ Keyboard</th></tr>
+          ${row('Weave left/right', 'drag LEFT half of screen', 'A / D')}
+          ${row('Sprint', 'hold RIGHT half', 'W')}
+          ${row('Shuffle (slow)', 'drag down & hold RIGHT half', 'S')}
+          ${row('Jump', 'tap RIGHT half', 'Space')}
+          ${row('Shoulder dip', 'flick up/down on RIGHT half', 'Q / E')}
+          ${row('Full duck', 'both dips together', 'Q + E')}
+          ${row('Stare-down 👀', 'tap the 👀 button', 'F')}
+          ${row('Phone map', 'tap the 🗺 button', 'M')}
+          ${row('Sit / stand', 'tap the 🪑 button (near a stall)', 'G')}
+          ${row('Sand Watch ⏳', 'tap the ⏳ button', 'R')}
+          ${row('Overbridge', 'tap 🌉 at a crossing', 'B')}
+        </table>
+        <div style="font-size:11px;opacity:.6;padding:6px 8px;line-height:1.6">
+          💡 Dip a shoulder (or duck) to slip past head-loads. Jump over dogs & drains.
+          Anyone walking <i>your</i> way is suspicious — stare to find out.
+        </div>
+      </div>`;
   }
 
   private showSettings(): void {

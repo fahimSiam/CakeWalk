@@ -32,6 +32,7 @@ export class ResultsState implements GameState {
     const r = params as RunResult;
     this.doubled = false;
     const stars = this.bank(r);
+    this.ctx.audio.jingle(r.success);
     this.build(r, stars);
   }
 
@@ -39,16 +40,26 @@ export class ResultsState implements GameState {
   private bank(r: RunResult): StarBreakdown | null {
     let stars: StarBreakdown | null = null;
     const areaId = r.runParams.area?.id;
-    let missionTaka = 0;
     this.ctx.save.update((save) => {
-      save.taka += r.taka;
-      missionTaka = applyRunToMissions(save, r.summary);
-      save.taka += missionTaka;
+      // Failed runs keep only a quarter of the taka and no mission progress —
+      // otherwise die-on-purpose + free retry farms the economy infinitely.
+      save.taka += r.success ? r.taka : Math.floor(r.taka * 0.25);
+      if (r.success) save.taka += applyRunToMissions(save, r.summary);
       touchStreak(save);
+      save.recentRuns.unshift({
+        date: localDateKey(),
+        area: areaId ?? 'graybox',
+        taka: r.taka,
+        stars: 0, // patched below once rated
+        success: r.success,
+        distance: Math.round(r.distance),
+      });
+      save.recentRuns = save.recentRuns.slice(0, 10);
       // Tutorial runs are unrated (idea.md §4 ruling).
       if (r.runParams.route && areaId && !r.runParams.daily && !r.runParams.tutorial) {
         stars = rateRun(r, r.runParams.route);
         save.stars[areaId] = Math.max(save.stars[areaId] ?? 0, stars.total);
+        if (save.recentRuns[0]) save.recentRuns[0].stars = stars.total;
       }
       if (r.runParams.daily) {
         const key = localDateKey();
@@ -94,7 +105,7 @@ export class ResultsState implements GameState {
       <div style="opacity:.8;font-size:13px">${Math.round(r.distance)} m · ${fmtTime(r.timeS)} · best combo x${r.bestCombo} · ${r.nearMisses} near-misses</div>
       <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center">
         ${r.success ? '<button class="cw-r-btn" id="cw-double" style="background:#5b9fd6">📺 Double taka</button>' : ''}
-        ${!r.success ? '<button class="cw-r-btn" id="cw-retry" style="background:#e8a33d;color:#1a1208">↻ Retry (free)</button>' : ''}
+        ${!r.success && !r.runParams.daily ? '<button class="cw-r-btn" id="cw-retry" style="background:#e8a33d;color:#1a1208">↻ Retry (free)</button>' : ''}
         <button class="cw-r-btn" id="cw-share" style="background:rgba(255,255,255,.15)">📤 Share</button>
         <button class="cw-r-btn" id="cw-home" style="background:rgba(255,255,255,.15)">🏘 Home</button>
       </div>

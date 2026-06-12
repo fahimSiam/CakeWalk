@@ -68,9 +68,10 @@ export class CrowdSystem {
     private bus: EventBus,
   ) {}
 
-  /** Spawn initial field of agents ahead of the player. */
+  /** Spawn the initial (ramped-down) field of agents ahead of the player. */
   prewarm(playerS: number): void {
-    for (let i = 0; i < this.config.density; i++) {
+    const initial = Math.round(this.config.density * 0.45);
+    for (let i = 0; i < initial; i++) {
       this.spawnAgent(playerS + this.rng.range(8, SPAWN_AHEAD_MAX));
     }
   }
@@ -161,6 +162,8 @@ export class CrowdSystem {
 
   private resolvePlayerInteractions(dt: number, player: Player): void {
     void dt;
+    // Airborne above the street (overbridge auto-walk): nobody can bump you.
+    if (player.y > 1.2) return;
     const pHalf = player.hitHalfWidth;
     for (let i = 0; i < MAX_AGENTS; i++) {
       if (this.state[i] === AgentState.Inactive) continue;
@@ -200,6 +203,10 @@ export class CrowdSystem {
   }
 
   private maintainPopulation(playerS: number): void {
+    // Gentle start: density ramps in over the first ~80 m of every run so the
+    // street fills up gradually instead of mobbing the player at step one.
+    const ramp = Math.min(1, 0.45 + (0.55 * playerS) / 80);
+    const targetDensity = Math.round(this.config.density * ramp);
     // Despawn behind, count active.
     let active = 0;
     for (let i = 0; i < MAX_AGENTS; i++) {
@@ -214,7 +221,7 @@ export class CrowdSystem {
       active++;
     }
     this.activeCount = active;
-    while (active < this.config.density) {
+    while (active < targetDensity) {
       if (!this.spawnAgent(playerS + this.rng.range(SPAWN_AHEAD_MIN, SPAWN_AHEAD_MAX))) break;
       active++;
     }

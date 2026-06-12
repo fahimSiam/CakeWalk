@@ -112,11 +112,14 @@ export class TrafficSystem {
     this.updateVehicles(dt, player);
   }
 
-  /** HUD overbridge button pressed inside a zone. */
+  /** HUD overbridge button pressed inside a zone. Accepts anywhere the
+   *  prompt is visible (the whole approach window before the far edge). */
   useOverbridge(player: Player): boolean {
     if (!this.inZone || this.overbridgeTimer > 0) return false;
-    if (player.s > this.inZone.s - 6 && player.s < this.inZone.s) {
-      this.overbridgeTimer = (this.inZone.halfWidth * 2 + 4) / 2.0;
+    if (player.s < this.inZone.s + this.inZone.halfWidth) {
+      // Walk the full remaining distance over the bridge.
+      const remaining = this.inZone.s + this.inZone.halfWidth + 2 - player.s;
+      this.overbridgeTimer = Math.max(1.5, remaining / 2.0);
       this.overbridgeZone = this.inZone;
       return true;
     }

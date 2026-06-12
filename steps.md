@@ -83,10 +83,22 @@
 - [x] 74 unit + 6 e2e green
 
 ## M9 — Packaging + Publishing Guide
-- [ ] Capacitor: add android + ios platforms, icons/splash, config, sync
-- [ ] Attempt CLI Android debug build if JDK/SDK present
-- [ ] Reviewer agent final full review
-- [ ] Write `next_steps.md` (signing, stores, real AdMob/Firebase wiring, ODbL credit, BD soft launch)
+- [x] Capacitor android/ + ios/ shells added & synced; procedural app icon (headless-Chrome-rendered SVG) → 61 Android + 4 iOS assets via @capacitor/assets
+- [x] **Android debug APK builds clean** (7.7 MB) using Android Studio's bundled JDK: `cd android && JAVA_HOME=/snap/android-studio/current/jbr ./gradlew assembleDebug`
+- [x] `next_steps.md` written: device touch-tuning, keystore/release builds, store listings + ODbL credit, AdMob/Firebase adapter wiring, BD soft launch, post-launch backlog
+- [x] Reviewer agent final full review done — 3 CRITICAL (dead tutorial theft, daily-retry leaderboard bypass, fail-bank infinite farming), 3 HIGH (HUD touch double-fire, GPU leaks per run, save-migration null crash), 4 MEDIUM, lows
+
+## M10 — Review Fixes + User Feedback (Rev 5) ✅
+- [x] C1 tutorial theft staged once (was re-pinned out of range every tick) · C2 retry hidden on daily (leaderboard integrity) · C3 failed runs bank 25% taka, missions on success only (kills die-retry farming)
+- [x] H1 HUD touchstart preventDefault (synthetic click double-fired sit/phone) · H2 GPU disposal: graybox/gate via owned-resource registry, rain via AtmosphereHandle.dispose · H3 save migration structural validation (null/array masquerade no longer bricks boot)
+- [x] M1 summary+elapsed snapshotted in rewind buffer · M2 bake drops ways with nodes/geometry mismatch (logged) · M3 routeSelect generation guard vs async race · M4 airborne (overbridge) immune to crowd/cow/dog/cat/dustbin
+- [x] LOW: min-steal respects cap, overbridge accepted across whole prompt window (timer scales w/ remaining distance), cat instancing = MAX_CATS + dog DynamicDrawUsage, simulated ad has cancel→false path
+- [x] Home page v2: ▶ PLAY reveals map picker (flow: map → random A/B → route puzzle → run), 🕘 History (last 10 runs w/ area/taka/stars), 🕹 Controls guide (touch+keyboard table + tips), UI click sounds
+- [x] Gradual difficulty: density ramps 45%→100% over first 80 m, newcomer ×0.7 until 5⭐, softer base (30+crowd×22, cap 170), tutorial 45
+- [x] Faces: eyes + mouth on the shared person geometry (crowd/pocketmars/player/ghost all inherit)
+- [x] Roadside life: tree 42 m/dustbin 70 m/cha 120 m synthesis (re-baked, ~50% more POIs) + parked rickshaws (~45 m) and utility poles (~28 m) alternating sides along every route
+- [x] Action sounds: jump blip, cha sip+clink, results jingle (success/fail variants), menu click
+- [x] 74 unit + 6 e2e green; menu/run screenshots verified
 
 ---
 
@@ -95,3 +107,4 @@
 - **2026-06-12 (a)**: User feature batch applied (Rev 3): Eid-ul-Adha exodus storyline, pocketmar tell/Stare-Down minigame, Sand Watch animation, 5-star rating, street life. Reviewer delta-pass applied (7 fixes).
 - **2026-06-12 (b)**: User locked everything: all §11 decisions (Mohammadpur high-pocketmar OK, Sand Watch in MVP, generous energy), ALL features in MVP, build the full game now. Stack chosen with user: Three.js + Capacitor + procedural art + real OSM + local-first services. idea.md reconciled to Rev 4 (restored Rev 3 content lost to stale editor buffer, kept user's Dhanmondi 2→32 + head-load/full-duck additions, updated §8 to final stack). steps.md restructured to build milestones M0–M9. Implementation plan approved; starting M0.
 - **2026-06-12 (c)**: M0 done — project scaffold, core architecture (GameLoop 30 Hz fixed-step, typed EventBus, seeded Rng streams w/ snapshot, StateMachine, versioned SaveSystem, DebugOverlay + test hook). Typecheck + 16 unit tests + e2e smoke (screenshot verified) green. Note: Playwright must use `channel: 'chrome'` on this machine.
+- **2026-06-12 (d)**: M1–M9 built & committed (graybox → procedural art → OSM Dhanmondi → systems/minigames → Sand Watch → economy/meta → all 6 areas + Eid theming → FTUE/audio/i18n → Capacitor packaging, Android debug APK 7.7 MB). Final reviewer pass + user playtest feedback → M10: all 3 CRITICAL + 3 HIGH + 4 MEDIUM + lows fixed; home page v2 (PLAY/history/controls), gradual difficulty, faces, roadside clutter, action sounds. next_steps.md + README written. Soak-tested (7 consecutive runs, zero errors).

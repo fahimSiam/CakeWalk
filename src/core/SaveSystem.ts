@@ -23,6 +23,15 @@ export interface SaveData {
   ftueDone: boolean;
   sandWatchCharge: number;
   glassesCharges: number;
+  /** Last 10 runs for the home-screen history. */
+  recentRuns: {
+    date: string;
+    area: string;
+    taka: number;
+    stars: number;
+    success: boolean;
+    distance: number;
+  }[];
 }
 
 export const SAVE_KEY = 'cakewalk-save';
@@ -46,6 +55,7 @@ export function defaultSave(): SaveData {
     ftueDone: false,
     sandWatchCharge: 0,
     glassesCharges: 0,
+    recentRuns: [],
   };
 }
 
@@ -75,9 +85,29 @@ function pickKnownFields(data: Record<string, unknown>): Partial<SaveData> {
   const def = defaultSave() as unknown as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(def)) {
-    if (key in data && typeof data[key] === typeof def[key]) out[key] = data[key];
+    if (key in data && shapeMatches(data[key], def[key])) out[key] = data[key];
   }
   return out as Partial<SaveData>;
+}
+
+/**
+ * Structural validation: `typeof null === 'object'` and arrays masquerade as
+ * objects, so a corrupt blob like {"energy": null} must NOT survive migration
+ * (it would crash every boot until the user wipes app data).
+ */
+function shapeMatches(value: unknown, reference: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(reference)) return Array.isArray(value);
+  if (typeof reference === 'object') {
+    if (typeof value !== 'object' || Array.isArray(value)) return false;
+    // Every key the default object has must exist with a matching primitive type.
+    for (const [k, refV] of Object.entries(reference as Record<string, unknown>)) {
+      const v = (value as Record<string, unknown>)[k];
+      if (typeof refV !== 'object' && typeof v !== typeof refV) return false;
+    }
+    return true;
+  }
+  return typeof value === typeof reference;
 }
 
 export class SaveSystem {

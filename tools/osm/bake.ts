@@ -81,10 +81,17 @@ function bakeArea(area: AreaDef): void {
   const roads: BakedRoad[] = [];
   const roadWays: { el: OsmElement; cls: RoadClass; pts: Vec2[] }[] = [];
   const nodeUse = new Map<number, number>();
+  let droppedWays = 0;
   for (const el of raw.elements) {
     if (el.type !== 'way' || !el.tags?.highway || !el.geometry || !el.nodes) continue;
     const cls = classify(el.tags.highway);
     if (!cls) continue;
+    // Bbox clipping can desync the node-id list from the geometry list; a
+    // mismatch would silently misalign the intersection graph. Fail loud.
+    if (el.nodes.length !== el.geometry.length || el.geometry.some((g) => g == null)) {
+      droppedWays++;
+      continue;
+    }
     const pts = el.geometry.map((g) => proj(g.lat, g.lon));
     roadWays.push({ el, cls, pts });
     for (const nid of el.nodes) nodeUse.set(nid, (nodeUse.get(nid) ?? 0) + 1);
@@ -262,9 +269,10 @@ function bakeArea(area: AreaDef): void {
   }
 
   // ---- Synthesized props where OSM is sparse (deterministic) ----
-  synthesizeAlongRoads(roads, chaPois, pois, 'chaDokan', 160, 120);
-  synthesizeAlongRoads(roads, pois.filter((p) => p.kind === 'dustbin'), pois, 'dustbin', 95, 60);
-  synthesizeAlongRoads(roads, pois.filter((p) => p.kind === 'tree'), pois, 'tree', 70, 35);
+  // Dense enough that no stretch of footpath feels empty.
+  synthesizeAlongRoads(roads, chaPois, pois, 'chaDokan', 120, 90);
+  synthesizeAlongRoads(roads, pois.filter((p) => p.kind === 'dustbin'), pois, 'dustbin', 70, 45);
+  synthesizeAlongRoads(roads, pois.filter((p) => p.kind === 'tree'), pois, 'tree', 42, 24);
 
   const baked: BakedArea = {
     id: area.id,
@@ -285,7 +293,8 @@ function bakeArea(area: AreaDef): void {
   writeFileSync(resolve(OUT_DIR, `${area.id}.json`), json);
   console.log(
     `[bake] ${area.id}: ${roads.length} roads, ${buildings.length} buildings, ${pois.length} pois, ` +
-      `graph ${nodes.length}n/${edges.length}e, ${(json.length / 1024).toFixed(0)} KB`,
+      `graph ${nodes.length}n/${edges.length}e, ${(json.length / 1024).toFixed(0)} KB` +
+      (droppedWays ? ` (${droppedWays} ways dropped: nodes/geometry mismatch)` : ''),
   );
 }
 

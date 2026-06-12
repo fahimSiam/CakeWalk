@@ -196,9 +196,10 @@ export class StreetLifeRenderer {
     this.catMesh = new InstancedMesh(
       paintColored(catGeo, new Color('#3a3a3a')),
       new MeshLambertMaterial({ flatShading: true, vertexColors: true }),
-      4,
+      3, // MAX_CATS
     );
     this.catMesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.dogMesh.instanceMatrix.setUsage(DynamicDrawUsage);
     for (const m of [this.dogMesh, this.catMesh, this.cowMesh]) {
       m.frustumCulled = false;
       scene.add(m);

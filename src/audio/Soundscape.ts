@@ -67,6 +67,38 @@ export class Soundscape {
     this.unsubs = [];
   }
 
+  // ---------- public action sounds ----------
+
+  /** Bright UI tick for menu buttons. */
+  uiClick(): void {
+    this.tone(620, 'triangle', 0.06, 0.12);
+  }
+
+  /** Springy jump blip. */
+  jump(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(330, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.14);
+    osc.connect(this.env(0.16, 0.16));
+    osc.start();
+    osc.stop(ctx.currentTime + 0.16);
+  }
+
+  /** Cha sip + cup clink when sitting down at a stall. */
+  sip(): void {
+    this.tone(1500, 'sine', 0.07, 0.1); // clink
+    setTimeout(() => this.tone(240, 'sine', 0.25, 0.08), 160);
+  }
+
+  /** Results jingle: rising for success, sagging for a knockout. */
+  jingle(success: boolean): void {
+    const notes = success ? [523, 659, 784, 1046] : [392, 330, 262];
+    notes.forEach((f, i) => setTimeout(() => this.tone(f, 'triangle', 0.28, 0.16), i * 130));
+  }
+
   // ---------- synth voices ----------
 
   private noiseSource(gain: number, freq: number, type: BiquadFilterType): AudioNode {

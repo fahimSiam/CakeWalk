@@ -27,6 +27,8 @@ export class RouteSelectState implements GameState {
   private endpoints = { a: 0, b: 0 };
   private seed = 1;
   private daily = false;
+  /** Bumped on enter/exit so a stale async load can't build UI post-exit. */
+  private generation = 0;
 
   constructor(private ctx: GameContext) {}
 
@@ -34,11 +36,13 @@ export class RouteSelectState implements GameState {
     const p = (params as RouteSelectParams | undefined) ?? { areaId: 'dhanmondi', seed: 1 };
     this.seed = p.seed;
     this.daily = p.daily ?? false;
-    void this.load(p);
+    void this.load(p, ++this.generation);
   }
 
-  private async load(p: RouteSelectParams): Promise<void> {
-    this.area = await loadArea(p.areaId);
+  private async load(p: RouteSelectParams, generation: number): Promise<void> {
+    const area = await loadArea(p.areaId);
+    if (generation !== this.generation) return; // state exited while loading
+    this.area = area;
     const graph = new RouteGraph(this.area);
     const rng = new Rng(p.seed).stream('route');
     this.endpoints = graph.pickEndpoints(rng);
@@ -215,6 +219,7 @@ export class RouteSelectState implements GameState {
   }
 
   exit(): void {
+    this.generation++;
     this.root?.remove();
     this.root = null;
     delete this.ctx.testApi.routeSelect;

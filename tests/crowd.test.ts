@@ -16,13 +16,18 @@ function makeCrowd(seed = 42) {
 }
 
 describe('CrowdSystem', () => {
-  it('prewarm fills to configured density', () => {
+  it('prewarm starts at the ramped-down density, fills to full as the player walks', () => {
     const { crowd } = makeCrowd();
     crowd.config.density = 100;
     crowd.prewarm(0);
     let active = 0;
     for (let i = 0; i < MAX_AGENTS; i++) if (crowd.state[i] !== AgentState.Inactive) active++;
-    expect(active).toBe(100);
+    expect(active).toBe(45); // gentle start (idea.md §9.1 gradual difficulty)
+    // Past the 80 m ramp, population reaches the configured density.
+    const player = new Player();
+    player.s = 100;
+    for (let k = 0; k < 60; k++) crowd.fixedUpdate(DT, player);
+    expect(crowd.activeCount).toBeGreaterThanOrEqual(95);
   });
 
   it('agents flow toward the player (s decreases with flow=-1)', () => {

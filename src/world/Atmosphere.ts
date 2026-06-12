@@ -50,19 +50,24 @@ export function rollAtmosphere(rng: RngStream, hasUmbrella: boolean): Atmosphere
   };
 }
 
-/** Applies sky/fog colors and adds rain particles. Returns a per-frame updater. */
+export interface AtmosphereHandle {
+  frame(frameDt: number): void;
+  dispose(): void;
+}
+
+/** Applies sky/fog colors and adds rain particles. Returns frame/dispose handle. */
 export function dressScene(
   scene: Scene,
   mods: AtmosphereMods,
   followTarget: () => { x: number; z: number },
-): (frameDt: number) => void {
+): AtmosphereHandle {
   const pal = PALETTES[mods.timeOfDay];
   const sky = new Color(pal.sky);
   if (mods.weather === 'rain') sky.lerp(new Color('#7d848c'), 0.45);
   scene.background = sky;
   scene.fog = new Fog(sky, mods.weather === 'rain' ? pal.fogNear * 0.7 : pal.fogNear, 130);
 
-  if (mods.weather !== 'rain') return () => {};
+  if (mods.weather !== 'rain') return { frame: () => {}, dispose: () => {} };
 
   // Rain: a recycling box of falling points around the player.
   const COUNT = 600;
@@ -81,14 +86,21 @@ export function dressScene(
   rain.frustumCulled = false;
   scene.add(rain);
 
-  return (frameDt: number) => {
-    const target = followTarget();
-    rain.position.set(target.x, 0, target.z);
-    const arr = geo.attributes.position!.array as Float32Array;
-    for (let i = 0; i < COUNT; i++) {
-      arr[i * 3 + 1]! -= 18 * frameDt;
-      if (arr[i * 3 + 1]! < 0) arr[i * 3 + 1] = 25;
-    }
-    geo.attributes.position!.needsUpdate = true;
+  return {
+    frame(frameDt: number) {
+      const target = followTarget();
+      rain.position.set(target.x, 0, target.z);
+      const arr = geo.attributes.position!.array as Float32Array;
+      for (let i = 0; i < COUNT; i++) {
+        arr[i * 3 + 1]! -= 18 * frameDt;
+        if (arr[i * 3 + 1]! < 0) arr[i * 3 + 1] = 25;
+      }
+      geo.attributes.position!.needsUpdate = true;
+    },
+    dispose() {
+      scene.remove(rain);
+      geo.dispose();
+      (rain.material as PointsMaterial).dispose();
+    },
   };
 }
