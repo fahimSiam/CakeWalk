@@ -11,6 +11,8 @@ import type { GameContext } from '@/core/GameContext';
 import { RunState } from '@/states/RunState';
 import { ResultsState } from '@/states/ResultsState';
 import { RouteSelectState } from '@/states/RouteSelectState';
+import { MenuState } from '@/states/MenuState';
+import { createLocalServices } from '@/services';
 
 const app = document.getElementById('app')!;
 const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -25,13 +27,15 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+const save = new SaveSystem();
 const ctx: GameContext = {
   renderer,
   camera,
   machine: new StateMachine(),
-  save: new SaveSystem(),
+  save,
   debug: new DebugOverlay(renderer),
   input: new InputSystem(app),
+  services: createLocalServices(save),
   loopTimeScale: (scale) => {
     loop.timeScale = scale;
   },
@@ -41,6 +45,7 @@ const ctx: GameContext = {
 ctx.machine.register('run', new RunState(ctx));
 ctx.machine.register('results', new ResultsState(ctx));
 ctx.machine.register('routeSelect', new RouteSelectState(ctx));
+ctx.machine.register('menu', new MenuState(ctx));
 
 const loop = new GameLoop({
   fixedUpdate(dt) {
@@ -84,8 +89,10 @@ void (async () => {
   const seed = Number(q.get('seed') ?? 1);
   if (q.has('graybox')) {
     ctx.machine.transition('run', { seed });
+  } else if (q.has('area')) {
+    ctx.machine.transition('routeSelect', { areaId: q.get('area'), seed });
   } else {
-    ctx.machine.transition('routeSelect', { areaId: q.get('area') ?? 'dhanmondi', seed });
+    ctx.machine.transition('menu');
   }
   loop.start();
   window.__cakewalk.ready = true;

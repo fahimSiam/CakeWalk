@@ -38,6 +38,14 @@ import { PickpocketRenderer, StreetLifeRenderer, TrafficRenderer } from '@/gfx/e
 import { PhoneOverlay } from '@/ui/PhoneOverlay';
 import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
+import {
+  OUTFIT_COLORS,
+  localDateKey,
+  packGhost,
+  unpackGhost,
+  type RunSummary,
+} from '@/meta/progression';
+import { buildPersonGeometry } from '@/gfx/meshFactory';
 
 const RUN_LENGTH = 500;
 const CORRIDOR_HALF_WIDTH = 3.2;
@@ -83,6 +91,21 @@ export class RunState implements GameState {
   private phoneOverlay!: PhoneOverlay;
   private sandWatch!: SandWatch;
   private rewindFx!: RewindFx;
+  private elapsed = 0;
+  private summary: RunSummary = {
+    chaCups: 0,
+    fruits: 0,
+    directCrossings: 0,
+    nearMisses: 0,
+    spotted: 0,
+    distanceM: 0,
+  };
+  private reviveUsed = false;
+  private reviveOverlay: HTMLDivElement | null = null;
+  // Ghost (seeded/daily routes): record this run, race the saved best.
+  private ghostFrames: { s: number; t: number }[] = [];
+  private ghostBest: { s: number; t: number }[] = [];
+  private ghostMesh: Mesh | null = null;
 
   constructor(private ctx: GameContext) {}
 
@@ -90,6 +113,10 @@ export class RunState implements GameState {
     const p = (params as RunParams | undefined) ?? { seed: 1 };
     this.params = p;
     this.finished = false;
+    this.elapsed = 0;
+    this.reviveUsed = false;
+    this.summary = { chaCups: 0, fruits: 0, directCrossings: 0, nearMisses: 0, spotted: 0, distanceM: 0 };
+    this.ghostFrames = [];
     this.bus = new EventBus();
     this.rng = new Rng(p.seed);
     if (p.route) {
@@ -148,22 +175,45 @@ export class RunState implements GameState {
       { sys: rngSnapshot, floats: 5 },
     ]);
     this.sandWatch = new SandWatch(buffer);
+    const save = this.ctx.save.get();
     this.sandWatch.owned =
+      save.ownedItems.includes('sandWatch') ||
       (p.items?.includes('sandWatch') ?? false) ||
       new URLSearchParams(location.search).has('sandwatch');
     this.sandWatch.enabled = !p.daily;
-    this.pickpockets.glassesActive = p.items?.includes('glasses') ?? false;
+    // Glasses are a 3-run consumable: burn one charge at run start.
+    if (save.glassesCharges > 0) {
+      this.pickpockets.glassesActive = true;
+      this.ctx.save.update((d) => d.glassesCharges--);
+    }
+    if (save.ownedItems.includes('shoes')) this.player.staminaEfficiency = 0.8;
+    if (save.ownedItems.includes('headphones')) this.score.meterGainMul = 1.25;
 
     this.buildScene();
     this.crowd.prewarm(this.player.s);
     this.crowdRenderer = new CrowdRenderer(this.scene, this.crowd, this.corridor);
-    this.avatar = new PlayerAvatar(this.scene);
+    this.avatar = new PlayerAvatar(
+      this.scene,
+      OUTFIT_COLORS[save.equippedOutfit] ?? OUTFIT_COLORS.default,
+    );
+    this.setupGhost(p);
     this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor);
     this.trafficRenderer = new TrafficRenderer(this.scene, this.traffic, this.corridor);
     this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor);
     this.hud = new Hud(this.ctx.input);
     this.phoneOverlay = new PhoneOverlay();
     this.rewindFx = new RewindFx(this.ctx.renderer.domElement);
+
+    // Mission/summary counters.
+    this.bus.on('restStarted', (e) => {
+      if (e.kind === 'chaDokan') this.summary.chaCups++;
+    });
+    this.bus.on('fruitGrabbed', () => this.summary.fruits++);
+    this.bus.on('crossingResolved', (e) => {
+      if (e.method === 'direct') this.summary.directCrossings++;
+    });
+    this.bus.on('nearMiss', () => this.summary.nearMisses++);
+    this.bus.on('theftSpotted', () => this.summary.spotted++);
 
     this.bus.on('bump', () => this.hud.toast('ওহ! bumped', 0));
     this.bus.on('cakewalkMeterFull', () => this.hud.toast('CAKEWALK! 2x points', 0));
@@ -263,6 +313,13 @@ export class RunState implements GameState {
 
   exit(): void {
     this.ctx.loopTimeScale(1);
+    this.reviveOverlay?.remove();
+    this.reviveOverlay = null;
+    if (this.ghostMesh) {
+      this.ghostMesh.geometry.dispose();
+      (this.ghostMesh.material as MeshLambertMaterial).dispose();
+      this.ghostMesh = null;
+    }
     this.hud.dispose();
     this.phoneOverlay.dispose();
     this.rewindFx.dispose();
@@ -327,6 +384,12 @@ export class RunState implements GameState {
     this.score.fixedUpdate(dt);
     this.score.addDistance(Math.max(0, this.player.s - this.prevS));
     this.sandWatch.addDistance(Math.max(0, this.player.s - this.prevS));
+    this.summary.distanceM += Math.max(0, this.player.s - this.prevS);
+    this.elapsed += dt;
+    // Ghost recording at 2 Hz on seeded (daily) routes.
+    if (this.params.daily && Math.floor(this.elapsed * 2) > this.ghostFrames.length - 1) {
+      this.ghostFrames.push({ s: this.player.s, t: this.player.t });
+    }
     this.ctx.debug.agentCount = this.crowd.activeCount;
 
     this.bus.flush();
@@ -335,7 +398,50 @@ export class RunState implements GameState {
     this.sandWatch.buffer.capture();
 
     if (this.player.s >= this.runLength) this.finish(true);
-    else if (this.player.health <= 0) this.finish(false);
+    else if (this.player.health <= 0) {
+      if (!this.reviveUsed && !this.params.daily) this.offerRevive();
+      else this.finish(false);
+    }
+  }
+
+  /** One rewarded-ad revive per run (not on the daily — leaderboard fairness). */
+  private offerRevive(): void {
+    this.reviveUsed = true;
+    this.ctx.loopTimeScale(0);
+    this.reviveOverlay = document.createElement('div');
+    this.reviveOverlay.style.cssText =
+      'position:fixed;inset:0;z-index:30;display:flex;flex-direction:column;align-items:center;' +
+      'justify-content:center;background:rgba(20,14,6,.85);color:#fff;font-family:system-ui;gap:12px';
+    this.reviveOverlay.innerHTML = `
+      <div style="font-size:30px;font-weight:900">😵 Knocked out!</div>
+      <button id="cw-revive" style="font-size:18px;padding:12px 32px;border-radius:12px;border:none;
+        background:#e8a33d;color:#1a1208;font-weight:800">📺 Second wind (watch ad)</button>
+      <button id="cw-giveup" style="font-size:14px;padding:8px 20px;border-radius:10px;border:none;
+        background:rgba(255,255,255,.15);color:#fff">Give up</button>`;
+    document.body.appendChild(this.reviveOverlay);
+    this.reviveOverlay.querySelector('#cw-revive')!.addEventListener('click', () => {
+      this.reviveOverlay?.remove();
+      this.reviveOverlay = null;
+      void this.ctx.services.ads.showRewarded('revive').then((ok) => {
+        if (ok) {
+          this.player.health = 60;
+          this.player.bumpCooldown = 2;
+          this.ctx.loopTimeScale(1);
+        } else {
+          this.finishNow(false);
+        }
+      });
+    });
+    this.reviveOverlay.querySelector('#cw-giveup')!.addEventListener('click', () => {
+      this.reviveOverlay?.remove();
+      this.reviveOverlay = null;
+      this.finishNow(false);
+    });
+  }
+
+  private finishNow(success: boolean): void {
+    this.ctx.loopTimeScale(1);
+    this.finish(success);
   }
 
   render(alpha: number, frameDt: number): void {
@@ -359,6 +465,7 @@ export class RunState implements GameState {
     this.pmRenderer.render();
     this.trafficRenderer.render();
     this.lifeRenderer.render();
+    this.renderGhost();
     this.hud.set(
       (this.player.health / HEALTH_MAX) * 100,
       this.player.stamina,
@@ -384,13 +491,58 @@ export class RunState implements GameState {
     this.finished = true;
     this.bus.emit('runFinished', { success });
     this.bus.flush();
+    // Persist the daily ghost if this run beat the stored one.
+    if (this.params.daily && success) {
+      const board = `daily-${localDateKey()}`;
+      this.ctx.save.update((d) => {
+        const prev = d.dailyResults[localDateKey()];
+        if (!prev || this.score.taka > prev.taka) d.ghosts[board] = packGhost(this.ghostFrames);
+      });
+    }
     this.ctx.machine.transition('results', {
       success,
       taka: this.score.taka,
       bestCombo: this.score.bestCombo,
       nearMisses: this.score.nearMisses,
       distance: Math.round(this.player.s),
+      timeS: this.elapsed,
+      healthFraction: this.player.health / HEALTH_MAX,
+      stolenTotal: this.score.stolenTotal,
+      summary: this.summary,
+      runParams: this.params,
     });
+  }
+
+  /** Daily routes race the translucent ghost of your stored best. */
+  private setupGhost(p: RunParams): void {
+    this.ghostMesh = null;
+    this.ghostBest = [];
+    if (!p.daily) return;
+    const packed = this.ctx.save.get().ghosts[`daily-${localDateKey()}`];
+    if (!packed || packed.length < 4) return;
+    this.ghostBest = unpackGhost(packed);
+    const mat = new MeshLambertMaterial({
+      flatShading: true,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.35,
+    });
+    this.ghostMesh = new Mesh(buildPersonGeometry(), mat);
+    this.scene.add(this.ghostMesh);
+  }
+
+  private renderGhost(): void {
+    if (!this.ghostMesh || this.ghostBest.length === 0) return;
+    const idx = Math.min(this.elapsed * 2, this.ghostBest.length - 1);
+    const i0 = Math.floor(idx);
+    const i1 = Math.min(i0 + 1, this.ghostBest.length - 1);
+    const f = idx - i0;
+    const a = this.ghostBest[i0]!;
+    const b = this.ghostBest[i1]!;
+    const pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+    this.corridor.toWorld(a.s + (b.s - a.s) * f, a.t + (b.t - a.t) * f, pose);
+    this.ghostMesh.position.set(pose.x, 0, pose.z);
+    this.ghostMesh.rotation.y = Math.atan2(pose.dirX, pose.dirZ);
   }
 
   private buildScene(): void {

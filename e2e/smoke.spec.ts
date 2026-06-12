@@ -21,7 +21,7 @@ test('route select shows Dhanmondi routes and starts a real run', async ({ page 
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/?debug=1&seed=11');
+  await page.goto('/?debug=1&seed=11&area=dhanmondi');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);
   await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
 
@@ -42,6 +42,29 @@ test('route select shows Dhanmondi routes and starts a real run', async ({ page 
   await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
   await page.waitForTimeout(700);
   await page.screenshot({ path: 'e2e/screenshots/run-dhanmondi.png' });
+  expect(errors).toEqual([]);
+});
+
+test('menu shows areas/energy and the daily starts without energy cost', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+
+  await page.goto('/');
+  await page.waitForFunction(() => window.__cakewalk?.ready === true);
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'menu');
+  await page.screenshot({ path: 'e2e/screenshots/menu.png' });
+
+  const energyBefore = await page.evaluate(() => window.__cakewalk.ctx.save.get().energy.current);
+  await page.evaluate(() => {
+    (window.__cakewalk.ctx.testApi.menu as { startDaily(): void }).startDaily();
+  });
+  await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
+  await page.evaluate(() => {
+    (window.__cakewalk.ctx.testApi.routeSelect as { start(i: number): void }).start(0);
+  });
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+  const energyAfter = await page.evaluate(() => window.__cakewalk.ctx.save.get().energy.current);
+  expect(energyAfter).toBe(energyBefore); // daily is free
   expect(errors).toEqual([]);
 });
 

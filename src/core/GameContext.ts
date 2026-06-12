@@ -7,6 +7,7 @@ import type { StateMachine } from './StateMachine';
 import type { SaveSystem } from './SaveSystem';
 import type { DebugOverlay } from './DebugOverlay';
 import type { InputSystem } from '@/player/Input';
+import type { Services } from '@/services';
 
 export interface GameContext {
   renderer: WebGLRenderer;
@@ -15,6 +16,7 @@ export interface GameContext {
   save: SaveSystem;
   debug: DebugOverlay;
   input: InputSystem;
+  services: Services;
   /** Scale the loop's sim time (slow-mo); 1 = normal. */
   loopTimeScale: (scale: number) => void;
   /** Mutable bag exposed on window.__cakewalk for Playwright/dev tooling. */

@@ -61,12 +61,13 @@
 - [x] RewindFx: sepia via CSS filter on the WebGL canvas + golden sand-grain canvas overlay converging on the watch; color snaps back at the landing
 - [x] vitest: state-hash equality across restore+replay, divergence with different inputs, charge/activation rules, full-buffer rewind distance, daily-disabled (60 tests green; audio whoosh lands with M8 audio pass)
 
-## M6 — Economy & Meta
-- [ ] Wallet, shop, powerups (glasses/shoes/umbrella/headphones/Sand Watch), cosmetic outfits (palette swaps: lungi, panjabi, school, office)
-- [ ] 5-star criteria (tutorial unrated; rewind voids theft), area unlock chain
-- [ ] Energy (free retries; generous: 8 runs/bar, ~12 min recharge; simulated rewarded-ad refill)
-- [ ] Streaks, missions, Ajker Rasta daily (date-seeded, Sand Watch off, share card), ghost runs (seeded routes), local leaderboards
-- [ ] Save schema migrations live
+## M6 — Economy & Meta ✅
+- [x] Services layer: IAds (simulated 5 s rewarded ad), ILeaderboard (local, server-shaped API), IAnalytics (noop) — real adapters slot in post-launch
+- [x] Shop: glasses (3-run consumable charges), shoes (-20% stamina drain), umbrella (M7 rain), headphones (+25% meter gain), Sand Watch, 3 outfits (palette swaps applied to avatar); no pay-to-win
+- [x] 5-star criteria (finish/pace-normalized-par/health>50%/untouched-wallet/streetsmart-combo≥8); rewind voids theft automatically via state restore; area chain unlock (0/3/7/12/18/24⭐, best-run stars per area)
+- [x] Energy: 8/bar, 12 min recharge, free retry of the same failed run, daily always free, ad refill; menu countdown
+- [x] Streaks (consecutive-day), 3 deterministic daily missions w/ taka rewards, Ajker Rasta daily (date-seed → area+route, Sand Watch off, one banked attempt, local leaderboard, ghost record/race vs translucent best), share card (canvas → native share/download), mid-run ad revive (not on daily), post-run taka doubler
+- [x] MenuState home (areas/energy/streak/wallet/shop/missions/settings + ODbL attribution + language/audio toggles); 72 unit + 4 e2e green
 
 ## M7 — All Areas + Theming
 - [ ] Bake Uttara, Bashundhara R/A, Mohammadpur, Puran Dhaka, Gulistan/Motijheel

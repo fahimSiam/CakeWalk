@@ -9,12 +9,14 @@ import { RouteGraph, type RouteOption } from '@/routing/RouteGraph';
 import { Rng } from '@/core/Rng';
 import { loadArea } from '@/world/levelStore';
 import { OSM_ATTRIBUTION } from '@/world/levelTypes';
+import { spendEnergy } from '@/meta/Energy';
 
 const ROUTE_COLORS = ['#e8a33d', '#5bbf6e', '#5b9fd6', '#c75bb1'];
 
 export interface RouteSelectParams {
   areaId: string;
   seed: number;
+  daily?: boolean;
 }
 
 export class RouteSelectState implements GameState {
@@ -24,12 +26,14 @@ export class RouteSelectState implements GameState {
   private selected = 0;
   private endpoints = { a: 0, b: 0 };
   private seed = 1;
+  private daily = false;
 
   constructor(private ctx: GameContext) {}
 
   enter(params?: unknown): void {
     const p = (params as RouteSelectParams | undefined) ?? { areaId: 'dhanmondi', seed: 1 };
     this.seed = p.seed;
+    this.daily = p.daily ?? false;
     void this.load(p);
   }
 
@@ -191,10 +195,22 @@ export class RouteSelectState implements GameState {
   private start(i: number): void {
     const route = this.routes[i];
     if (!route || !this.area) return;
+    // A fresh run costs energy (retries are free and bypass this screen).
+    // The daily is the shared challenge and is always playable.
+    if (!this.daily) {
+      let ok = false;
+      this.ctx.save.update((d) => (ok = spendEnergy(d)));
+      void this.ctx.save.flush();
+      if (!ok) {
+        this.ctx.machine.transition('menu');
+        return;
+      }
+    }
     this.ctx.machine.transition('run', {
       seed: this.seed,
       area: this.area,
       route,
+      daily: this.daily,
     });
   }
 

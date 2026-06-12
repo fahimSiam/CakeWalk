@@ -51,6 +51,8 @@ export class Player {
   /** Set by phone-check; player stops and is blind. */
   phoneLocked = false;
   walkPhase = 0;
+  /** <1 with Good Shoes (stamina drains slower). */
+  staminaEfficiency = 1;
 
   get jumping(): boolean {
     return this.jumpTimer > 0;
@@ -90,7 +92,7 @@ export class Player {
 
     // Stamina.
     if (this.speed > SPEED_WALK + 0.5) {
-      this.stamina = Math.max(0, this.stamina - STAMINA_DRAIN_JOG * dt);
+      this.stamina = Math.max(0, this.stamina - STAMINA_DRAIN_JOG * this.staminaEfficiency * dt);
       if (this.stamina === 0) this.exhausted = true;
     } else {
       this.stamina = Math.min(STAMINA_MAX, this.stamina + STAMINA_RECOVER_WALK * dt);

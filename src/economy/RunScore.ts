@@ -17,6 +17,8 @@ export class RunScore {
   taka = 0;
   combo = 0;
   meter = 0; // 0..1 Cakewalk meter
+  /** >1 with Headphones (meter fills faster). */
+  meterGainMul = 1;
   meterActive = 0; // seconds remaining of doubled points
   stolenTotal = 0;
   nearMisses = 0;
@@ -78,7 +80,7 @@ export class RunScore {
     if (this.combo > this.bestCombo) this.bestCombo = this.combo;
     this.add(Math.round(NEAR_MISS_BASE * this.multiplier), 'nearMiss');
     if (this.meterActive === 0) {
-      this.meter = Math.min(1, this.meter + METER_PER_NEARMISS);
+      this.meter = Math.min(1, this.meter + METER_PER_NEARMISS * this.meterGainMul);
       if (this.meter >= 1) {
         this.meter = 0;
         this.meterActive = METER_FULL_DURATION;
