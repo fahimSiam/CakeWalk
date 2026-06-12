@@ -9,8 +9,9 @@
  */
 import type { MeshLambertMaterial, WebGLProgramParametersWithUniforms } from 'three';
 
-const HIP_Y = 0.82;
-const SHOULDER_Y = 1.32;
+// Pivot heights must match buildPersonGeometry's proportions.
+const HIP_Y = 0.78;
+const SHOULDER_Y = 1.2;
 
 const COMMON_GLSL = /* glsl */ `
   attribute float limbId;

@@ -45,6 +45,10 @@ export class Hud {
           width:auto;border-radius:14px;padding:0 18px;font-size:15px;font-weight:800;display:none}
         .cw-crossing{position:absolute;top:34%;left:50%;transform:translateX(-50%);color:#ffd34a;
           font:800 17px system-ui;text-shadow:0 2px 4px #000;display:none;text-align:center}
+        .cw-keys{position:absolute;left:12px;bottom:max(12px,env(safe-area-inset-bottom));
+          background:rgba(0,0,0,.55);border-radius:10px;padding:8px 10px;font:11px/1.7 monospace;
+          color:#ddd;pointer-events:auto;display:none}
+        .cw-keys b{color:#ffd34a}
       </style>
       <div class="cw-bars">
         <div class="cw-bar cw-health"><div></div></div>
@@ -60,6 +64,12 @@ export class Hud {
       <button class="cw-btn cw-btn-watch">⏳</button>
       <button class="cw-btn cw-btn-bridge">🌉 overbridge</button>
       <div class="cw-crossing">⚠️ CROSSING — time the gap!<br><span style="font-size:13px;opacity:.85">or take the overbridge (safe, no bonus)</span></div>
+      <div class="cw-keys">
+        <b>A/D</b> weave · <b>W</b> sprint · <b>S</b> slow<br>
+        <b>Space</b> jump · <b>Q/E</b> dip (<b>Q+E</b> duck)<br>
+        <b>F</b> stare 👀 · <b>M</b> phone · <b>G</b> sit<br>
+        <b>R</b> sand watch · <b>B</b> overbridge · <b>H</b> hide
+      </div>
     `;
     document.body.appendChild(this.root);
     this.healthFill = this.root.querySelector('.cw-health>div')!;
@@ -88,7 +98,19 @@ export class Hud {
     this.bridgeBtn = bind('.cw-btn-bridge', () => input.pressOverbridge());
     this.watchBtn = bind('.cw-btn-watch', () => input.pressSandWatch());
     this.crossingEl = this.root.querySelector('.cw-crossing')!;
+
+    // Desktop/browser play: keep the keyboard map on screen (H toggles).
+    const keys = this.root.querySelector<HTMLDivElement>('.cw-keys')!;
+    if (!('ontouchstart' in window)) keys.style.display = 'block';
+    this.keyToggle = (e: KeyboardEvent): void => {
+      if (e.code === 'KeyH') {
+        keys.style.display = keys.style.display === 'none' ? 'block' : 'none';
+      }
+    };
+    window.addEventListener('keydown', this.keyToggle);
   }
+
+  private keyToggle: ((e: KeyboardEvent) => void) | null = null;
 
   private watchBtn!: HTMLButtonElement;
 
@@ -142,6 +164,7 @@ export class Hud {
   }
 
   dispose(): void {
+    if (this.keyToggle) window.removeEventListener('keydown', this.keyToggle);
     this.root.remove();
   }
 }

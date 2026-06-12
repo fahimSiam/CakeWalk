@@ -35,11 +35,6 @@ export class MenuState implements GameState {
   enter(): void {
     const save = this.ctx.save.get();
     rechargeEnergy(save);
-    const skipFtue = new URLSearchParams(location.search).get('ftue') === '0';
-    if (!save.ftueDone && !skipFtue) {
-      void this.startTutorial();
-      return;
-    }
     this.build();
     this.timer = setInterval(() => {
       rechargeEnergy(this.ctx.save.get());
@@ -92,6 +87,15 @@ export class MenuState implements GameState {
         font-size:24px;font-weight:900;letter-spacing:1px;box-shadow:0 6px 18px rgba(232,163,61,.25)">
         ▶ PLAY
       </button>
+      ${
+        save.ftueDone
+          ? ''
+          : `<button id="cw-tutorial" style="width:100%;text-align:left;border:2px dashed #5bbf6e;border-radius:14px;
+              padding:12px 14px;background:rgba(91,191,110,.12);color:#fff;font-family:inherit;margin-bottom:12px">
+              <div style="font-weight:900;font-size:16px">🎓 New here? Take the 2-minute tutorial</div>
+              <div style="font-size:12px;opacity:.8">A gentle Dhanmondi walk — learn to weave, duck, and spot pocketmars.</div>
+            </button>`
+      }
 
       <button id="cw-daily" style="width:100%;text-align:left;border:2px solid #5b9fd6;border-radius:14px;padding:12px 14px;
         background:rgba(91,159,214,.12);color:#fff;font-family:inherit;margin-bottom:14px">
@@ -152,6 +156,9 @@ export class MenuState implements GameState {
       wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
       wrap.scrollIntoView({ behavior: 'smooth' });
     });
+    if (this.root.querySelector('#cw-tutorial')) {
+      click('#cw-tutorial', () => void this.startTutorial());
+    }
     click('#cw-daily', () => {
       if (!dailyDone) this.startDaily();
     });

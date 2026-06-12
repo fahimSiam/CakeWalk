@@ -108,3 +108,12 @@
 - **2026-06-12 (b)**: User locked everything: all §11 decisions (Mohammadpur high-pocketmar OK, Sand Watch in MVP, generous energy), ALL features in MVP, build the full game now. Stack chosen with user: Three.js + Capacitor + procedural art + real OSM + local-first services. idea.md reconciled to Rev 4 (restored Rev 3 content lost to stale editor buffer, kept user's Dhanmondi 2→32 + head-load/full-duck additions, updated §8 to final stack). steps.md restructured to build milestones M0–M9. Implementation plan approved; starting M0.
 - **2026-06-12 (c)**: M0 done — project scaffold, core architecture (GameLoop 30 Hz fixed-step, typed EventBus, seeded Rng streams w/ snapshot, StateMachine, versioned SaveSystem, DebugOverlay + test hook). Typecheck + 16 unit tests + e2e smoke (screenshot verified) green. Note: Playwright must use `channel: 'chrome'` on this machine.
 - **2026-06-12 (d)**: M1–M9 built & committed (graybox → procedural art → OSM Dhanmondi → systems/minigames → Sand Watch → economy/meta → all 6 areas + Eid theming → FTUE/audio/i18n → Capacitor packaging, Android debug APK 7.7 MB). Final reviewer pass + user playtest feedback → M10: all 3 CRITICAL + 3 HIGH + 4 MEDIUM + lows fixed; home page v2 (PLAY/history/controls), gradual difficulty, faces, roadside clutter, action sounds. next_steps.md + README written. Soak-tested (7 consecutive runs, zero errors).
+
+## M11 — Browser UX + Cartoon Faces (user feedback round 2) ✅
+- [x] Menu ALWAYS first: removed the first-launch auto-tutorial redirect; new players get a dashed "🎓 New here? Take the 2-minute tutorial" card above the daily (PLAY works immediately too)
+- [x] Cartoon person v2 (Sims-readable): bigger head + neck + ears, white eyes w/ pupils, brows, nose, mouth, hair framing (cap/back/sideburns), tapered torso, shoes; walk-shader pivots retuned (hip 0.78, shoulder 1.2); shared by crowd/pocketmars/player/ghost
+- [x] On-screen keyboard controls overlay during runs on non-touch devices (H toggles); map choosing flow unchanged (PLAY → map → random A/B → route puzzle)
+- [x] 74 unit + 6 e2e green; menu + in-run screenshots verified
+
+## Log (continued)
+- **2026-06-12 (e)**: M11 — menu-first boot (tutorial is now an invitation, not a kidnapping), cartoon faces v2, desktop controls overlay.

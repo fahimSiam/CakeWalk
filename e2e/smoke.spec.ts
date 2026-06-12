@@ -84,19 +84,21 @@ test('menu shows areas/energy and the daily starts without energy cost', async (
   expect(errors).toEqual([]);
 });
 
-test('first launch goes into the tutorial run', async ({ page }) => {
+test('first launch shows the menu with a tutorial card that starts the tutorial', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
-  await page.goto('/'); // fresh storage → FTUE
+  await page.goto('/'); // fresh storage
   await page.waitForFunction(() => window.__cakewalk?.ready === true);
+  // Menu first, always.
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'menu');
+  await expect(page.locator('#cw-tutorial')).toBeVisible();
+  await expect(page.locator('#cw-play')).toBeVisible();
+  await page.click('#cw-tutorial');
   await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run', undefined, {
     timeout: 15000,
   });
-  const isTutorial = await page.evaluate(() => {
-    const run = window.__cakewalk.ctx.testApi.run as { player: unknown } | undefined;
-    return Boolean(run);
-  });
-  expect(isTutorial).toBe(true);
   expect(errors).toEqual([]);
 });
 

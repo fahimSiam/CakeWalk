@@ -42,9 +42,10 @@ function paintPart(part: Part): BufferGeometry {
 }
 
 /**
- * ~1.7 m tall blocky person, origin at feet. ~180 tris.
- * Clothes (torso, legs upper) are tinted by instance color; skin/hair/pants
- * stay fixed so one instanced mesh still reads as varied people.
+ * ~1.7 m tall cartoon person (Sims-ish proportions: big head, expressive
+ * face), origin at feet. Clothes (torso, sleeves) are tinted by instance
+ * color; skin/hair/pants stay fixed so one instanced mesh still reads as
+ * varied people. Mesh forward is +Z.
  */
 export function buildPersonGeometry(): BufferGeometry {
   const parts: Part[] = [];
@@ -64,24 +65,48 @@ export function buildPersonGeometry(): BufferGeometry {
     parts.push({ geo, limbId, color, tinted });
   };
 
-  // Head + hair cap (limb 0 — bobs with torso). Mesh forward is +Z.
-  add(0.26, 0.26, 0.24, 0, 1.52, 0, 0, SKIN);
-  add(0.28, 0.1, 0.26, 0, 1.69, -0.01, 0, HAIR);
-  // Face: eyes + mouth so people read as people, not blocks.
-  const EYE = new Color('#1d1d1d');
-  add(0.05, 0.05, 0.02, -0.06, 1.56, 0.125, 0, EYE);
-  add(0.05, 0.05, 0.02, 0.06, 1.56, 0.125, 0, EYE);
-  add(0.09, 0.025, 0.02, 0, 1.46, 0.125, 0, new Color('#7a4438'));
-  // Torso (shirt — tinted).
-  add(0.46, 0.55, 0.26, 0, 1.1, 0, 0, new Color('#ffffff'), true);
-  // Legs: upper (pants), lower (pants darker = same), pivot at hip y≈0.82.
-  add(0.18, 0.82, 0.2, -0.13, 0.41, 0, 1, PANTS);
-  add(0.18, 0.82, 0.2, 0.13, 0.41, 0, 2, PANTS);
-  // Arms: shirt sleeves upper + skin hands, pivot at shoulder y≈1.32.
-  add(0.12, 0.52, 0.16, -0.3, 1.1, 0, 3, new Color('#ffffff'), true);
-  add(0.1, 0.14, 0.14, -0.3, 0.78, 0, 3, SKIN);
-  add(0.12, 0.52, 0.16, 0.3, 1.1, 0, 4, new Color('#ffffff'), true);
-  add(0.1, 0.14, 0.14, 0.3, 0.78, 0, 4, SKIN);
+  const WHITE = new Color('#ffffff');
+  const EYE_WHITE = new Color('#f4f0e8');
+  const PUPIL = new Color('#221a12');
+  const MOUTH = new Color('#9a5a48');
+
+  // --- Head (cartoon-big) + neck, limb 0 (bobs with torso) ---
+  add(0.36, 0.34, 0.32, 0, 1.5, 0, 0, SKIN); // head
+  add(0.14, 0.08, 0.14, 0, 1.3, 0, 0, SKIN); // neck
+  // Hair: cap + back + sideburns frame the face.
+  add(0.39, 0.12, 0.35, 0, 1.69, -0.01, 0, HAIR);
+  add(0.38, 0.26, 0.08, 0, 1.55, -0.16, 0, HAIR);
+  add(0.05, 0.16, 0.3, -0.185, 1.58, -0.02, 0, HAIR);
+  add(0.05, 0.16, 0.3, 0.185, 1.58, -0.02, 0, HAIR);
+  // Ears.
+  add(0.04, 0.09, 0.07, -0.2, 1.49, 0.0, 0, SKIN);
+  add(0.04, 0.09, 0.07, 0.2, 1.49, 0.0, 0, SKIN);
+  // Face: white eyes with pupils, brows, nose, mouth.
+  add(0.09, 0.07, 0.02, -0.085, 1.54, 0.165, 0, EYE_WHITE);
+  add(0.09, 0.07, 0.02, 0.085, 1.54, 0.165, 0, EYE_WHITE);
+  add(0.04, 0.045, 0.025, -0.075, 1.535, 0.168, 0, PUPIL);
+  add(0.04, 0.045, 0.025, 0.075, 1.535, 0.168, 0, PUPIL);
+  add(0.1, 0.025, 0.02, -0.085, 1.6, 0.165, 0, HAIR); // brows
+  add(0.1, 0.025, 0.02, 0.085, 1.6, 0.165, 0, HAIR);
+  add(0.05, 0.07, 0.05, 0, 1.46, 0.17, 0, SKIN); // nose
+  add(0.11, 0.03, 0.02, 0, 1.39, 0.165, 0, MOUTH);
+
+  // --- Torso (shirt — tinted), slightly tapered look via two stacked boxes ---
+  add(0.46, 0.34, 0.26, 0, 1.1, 0, 0, WHITE, true);
+  add(0.42, 0.22, 0.24, 0, 0.84, 0, 0, WHITE, true);
+
+  // --- Legs (pants), pivot at hip y≈0.78 ---
+  add(0.17, 0.74, 0.2, -0.12, 0.37, 0, 1, PANTS);
+  add(0.17, 0.74, 0.2, 0.12, 0.37, 0, 2, PANTS);
+  // Shoes.
+  add(0.18, 0.08, 0.28, -0.12, 0.04, 0.03, 1, HAIR);
+  add(0.18, 0.08, 0.28, 0.12, 0.04, 0.03, 2, HAIR);
+
+  // --- Arms: sleeves (tinted) + skin hands, pivot at shoulder y≈1.2 ---
+  add(0.12, 0.42, 0.16, -0.3, 1.04, 0, 3, WHITE, true);
+  add(0.1, 0.16, 0.13, -0.3, 0.76, 0, 3, SKIN);
+  add(0.12, 0.42, 0.16, 0.3, 1.04, 0, 4, WHITE, true);
+  add(0.1, 0.16, 0.13, 0.3, 0.76, 0, 4, SKIN);
 
   const merged = mergeGeometries(parts.map(paintPart), false);
   merged.computeVertexNormals();
