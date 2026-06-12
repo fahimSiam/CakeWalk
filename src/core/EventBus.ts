@@ -14,6 +14,7 @@ export interface GameEvents {
   takaChanged: { delta: number; total: number; reason: string };
   theft: { amount: number; source: 'walk' | 'phone' | 'seated' };
   theftSpotted: { bonus: number };
+  seatedTellStarted: Record<string, never>;
   stareMisread: Record<string, never>;
   healthChanged: { delta: number; hp: number };
   staminaEmpty: Record<string, never>;

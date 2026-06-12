@@ -62,6 +62,15 @@ export class Hud {
           70%{transform:translateX(-50%) scale(1.08)}100%{transform:translateX(-50%) scale(1);opacity:1}}
         @keyframes cwPulse{0%,100%{box-shadow:0 4px 20px rgba(232,163,61,.35)}
           50%{box-shadow:0 4px 30px rgba(232,163,61,.75)}}
+        .cw-alert{position:absolute;left:50%;top:42%;transform:translateX(-50%);display:none;
+          flex-direction:column;align-items:center;gap:7px;background:rgba(40,8,4,.92);
+          border:2px solid #ff5a3c;border-radius:14px;padding:12px 18px;color:#fff;
+          font:800 16px system-ui;white-space:nowrap;box-shadow:0 4px 28px rgba(255,90,60,.5)}
+        .cw-alert.cw-pop{animation:cwAlertPop .22s cubic-bezier(.34,1.56,.64,1)}
+        .cw-alert .cw-bar{width:170px;height:8px;border-radius:4px;background:rgba(255,255,255,.2);overflow:hidden}
+        .cw-alert .cw-bar>div{height:100%;background:#ff5a3c;border-radius:4px}
+        @keyframes cwAlertPop{0%{transform:translateX(-50%) scale(.4);opacity:0}
+          70%{transform:translateX(-50%) scale(1.1)}100%{transform:translateX(-50%) scale(1);opacity:1}}
       </style>
       <div class="cw-bars">
         <div class="cw-bar cw-health"><div></div></div>
@@ -78,6 +87,11 @@ export class Hud {
       <button class="cw-btn cw-btn-bridge">🌉 overbridge</button>
       <div class="cw-crossing">⚠️ CROSSING — time the gap!<br><span style="font-size:13px;opacity:.85">or take the overbridge (safe, no bonus)</span></div>
       <div class="cw-prompt"></div>
+      <div class="cw-alert">
+        <div>❗ Pocketmar reaching for your pocket!</div>
+        <div class="cw-bar"><div></div></div>
+        <div style="font-weight:600;font-size:13px;opacity:.9">${'ontouchstart' in window ? 'tap 👀 to shoo him off!' : 'press <b style="color:#ffd34a">F</b> to shoo him off!'}</div>
+      </div>
       <div class="cw-keys">
         <b>A/D</b> weave · <b>W</b> sprint · <b>S</b> slow<br>
         <b>Space</b> jump · <b>Q/E</b> dip (<b>Q+E</b> duck)<br>
@@ -145,6 +159,25 @@ export class Hud {
   private crossingShown = false;
 
   private promptShownFor: string | null = null;
+  private alertShown = false;
+
+  /** Seated-theft minigame: ❗ alert + draining timer bar. progress 1→0. */
+  setSeatedAlert(progress: number | null): void {
+    const alert = this.root.querySelector<HTMLDivElement>('.cw-alert')!;
+    const show = progress !== null;
+    if (show !== this.alertShown) {
+      this.alertShown = show;
+      alert.style.display = show ? 'flex' : 'none';
+      alert.classList.remove('cw-pop');
+      if (show) {
+        void alert.offsetWidth;
+        alert.classList.add('cw-pop');
+      }
+    }
+    if (progress !== null) {
+      alert.querySelector<HTMLDivElement>('.cw-bar>div')!.style.width = `${progress * 100}%`;
+    }
+  }
 
   /** Contextual prompts: bench in range / inside a crossing zone. */
   setContext(

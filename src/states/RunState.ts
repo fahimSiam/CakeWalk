@@ -49,7 +49,7 @@ import {
 import { buildPersonGeometry } from '@/gfx/meshFactory';
 import { dressScene, rollAtmosphere, type AtmosphereHandle, type AtmosphereMods } from '@/world/Atmosphere';
 import { t, tf } from '@/i18n';
-import { PmState } from '@/pickpocket/PickpocketSystem';
+import { PmState, SEATED_TELL_TIME } from '@/pickpocket/PickpocketSystem';
 import { totalStars } from '@/economy/stars';
 
 const RUN_LENGTH = 500;
@@ -304,6 +304,7 @@ export class RunState implements GameState {
       }
     });
     this.bus.on('theftSpotted', () => this.hud.toast(t('spotted'), 0));
+    this.bus.on('seatedTellStarted', () => this.ctx.audio.alert());
     this.bus.on('stareMisread', () => this.hud.toast(t('misread'), 0));
     this.bus.on('fruitGrabbed', () => this.hud.toast(t('fruit'), 0));
     this.bus.on('catStumble', () => this.hud.toast(t('cat'), 0));
@@ -627,18 +628,47 @@ export class RunState implements GameState {
     const s = this.prevS + (this.player.s - this.prevS) * alpha;
     const t = this.prevT + (this.player.t - this.prevT) * alpha;
     this.corridor.toWorld(s, t, this.pose);
-    this.avatar.update(this.player, s, t, this.corridor);
+    // Sitting: ease onto the bench just off the strip, facing the street.
+    let sitTarget: { x: number; z: number; yaw: number } | null = null;
+    const restingAt = this.interactions.restingAt;
+    if (this.player.resting && restingAt) {
+      const half = this.corridor.halfWidth(restingAt.s);
+      const side = restingAt.t >= 0 ? 1 : -1;
+      // The bench is on the street side of the stall (the stall geometry's
+      // bench sits ~1.3 m in front of its center) — never inside the stall.
+      const benchT = side * Math.max(0.8, Math.min(Math.abs(restingAt.t) - 1.3, half + 0.5));
+      const bp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+      this.corridor.toWorld(restingAt.s, benchT, bp);
+      // Path normal (right side) is (-dirZ, dirX); the bench sits on `side`,
+      // so the seated player faces the opposite way — back toward the street.
+      const faceX = -side * -bp.dirZ;
+      const faceZ = -side * bp.dirX;
+      sitTarget = { x: bp.x, z: bp.z, yaw: Math.atan2(faceX, faceZ) };
+    }
+    this.avatar.update(this.player, s, t, this.corridor, sitTarget, frameDt);
 
     // Chase cam: behind and above along the path direction, looking ahead.
     // Critically damped toward the target so corners swing smoothly instead
     // of snapping with the path direction.
     const cam = this.ctx.camera;
     const back = 5.2;
-    const targetX = this.pose.x - this.pose.dirX * back - t * 0.4;
-    const targetY = 3.0 + this.player.y * 0.3;
-    const targetZ = this.pose.z - this.pose.dirZ * back;
-    const lookX = this.pose.x + this.pose.dirX * 6;
-    const lookZ = this.pose.z + this.pose.dirZ * 6;
+    let targetX = this.pose.x - this.pose.dirX * back - t * 0.4;
+    let targetY = 3.0 + this.player.y * 0.3;
+    let targetZ = this.pose.z - this.pose.dirZ * back;
+    let lookX = this.pose.x + this.pose.dirX * 6;
+    let lookZ = this.pose.z + this.pose.dirZ * 6;
+    if (sitTarget) {
+      // Cinematic rest framing: swing out front so the seated character
+      // (and any approaching pocketmar) is in view.
+      const fx = Math.sin(sitTarget.yaw);
+      const fz = Math.cos(sitTarget.yaw);
+      // High three-quarter angle: above passing heads, looking down at the bench.
+      targetX = sitTarget.x + fx * 6.5 - fz * 2.5;
+      targetY = 4.6;
+      targetZ = sitTarget.z + fz * 6.5 + fx * 2.5;
+      lookX = sitTarget.x;
+      lookZ = sitTarget.z;
+    }
     if (this.camInit) {
       const k = Math.min(1, frameDt * 6);
       cam.position.x += (targetX - cam.position.x) * k;
@@ -670,6 +700,17 @@ export class RunState implements GameState {
       });
     } else {
       this.restMarker.update(frameDt, null);
+    }
+    // Seated-theft minigame: ❗ over the creeping thief + draining timer.
+    const thief = this.player.resting ? this.pickpockets.seatedThiefPos : null;
+    if (thief) {
+      const tp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+      this.corridor.toWorld(thief.s, thief.t, tp);
+      this.restMarker.updateAlert({ x: tp.x, z: tp.z });
+      this.hud.setSeatedAlert(this.pickpockets.seatedTell / SEATED_TELL_TIME);
+    } else {
+      this.restMarker.updateAlert(null);
+      this.hud.setSeatedAlert(null);
     }
     this.hud.set(
       (this.player.health / HEALTH_MAX) * 100,

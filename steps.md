@@ -134,3 +134,8 @@
 ## M13 — Sit Prompt Popup (user feedback) ✅
 - [x] San Andreas-style action prompt: the moment a stall/bench is in sitting range, a bordered pill pops in (spring scale-in + glow pulse) above the buttons — "☕ Cha break [G] sit" on keyboard, "tap 🪑" on touch; disappears on leave/sit; works alongside the floating ☕/🪑 world marker
 - **2026-06-12 (g)**: M13 sit prompt verified by screenshot next to a live cha dokan.
+
+## M14 — Sitting Animation + Seated Minigame (user feedback) ✅
+- [x] Real sit pose: shader fold (legs forward at hip, body sinks onto bench, arms forward "holding the cha") eased in/out via uSit uniform; avatar walks to the bench point (street side of the stall, never inside it) and turns to face the street; cinematic high three-quarter camera frames the seated character
+- [x] Seated-theft minigame made visible: thief creeps toward the bench during a 1.6 s tell with a pulsing ❗ marker overhead, red alert pill ("Pocketmar reaching for your pocket!") with draining timer bar + F/👀 hint, two-tone audio alert; shoo = +5 taka, miss = -12% wallet
+- **2026-06-12 (h)**: M14 verified by screenshots (sit pose at cha dokan, alert minigame mid-tell).

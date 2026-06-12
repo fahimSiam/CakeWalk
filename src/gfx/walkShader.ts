@@ -32,6 +32,19 @@ const WALK_GLSL = /* glsl */ `
   } else {
     transformed.y += abs(cwSwing) * 0.045 * cwAmp;
   }
+  // Sitting (player only): legs fold forward at the hip, body sinks onto
+  // the bench, hands rest forward (holding the cha cup).
+  if (cwSit > 0.001) {
+    float below = max(${HIP_Y} - position.y, 0.0);
+    if (limbId == 1.0 || limbId == 2.0) {
+      transformed.z += cwSit * 0.85 * below;
+      transformed.y += cwSit * below * 0.55;
+    }
+    if (limbId == 3.0 || limbId == 4.0) {
+      transformed.z += cwSit * 0.4 * max(${SHOULDER_Y} - position.y, 0.0);
+    }
+    transformed.y -= cwSit * 0.34;
+  }
 `;
 
 /** Tint chunk: clothes (tint=1) take the instance color, rest keep base. */
@@ -49,16 +62,19 @@ const COLOR_VERTEX_INSTANCED = /* glsl */ `
 export function applyWalkShader(
   material: MeshLambertMaterial,
   mode: 'instanced' | 'single',
-): { uniforms: { uPhase: { value: number }; uSwing: { value: number } } } {
-  const uniforms = { uPhase: { value: 0 }, uSwing: { value: 0 } };
+): {
+  uniforms: { uPhase: { value: number }; uSwing: { value: number }; uSit: { value: number } };
+} {
+  const uniforms = { uPhase: { value: 0 }, uSwing: { value: 0 }, uSit: { value: 0 } };
   material.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     Object.assign(shader.uniforms, uniforms);
     const head =
       mode === 'instanced'
         ? `${COMMON_GLSL}\nattribute float aPhase;\nattribute float aSwing;`
-        : `${COMMON_GLSL}\nuniform float uPhase;\nuniform float uSwing;`;
+        : `${COMMON_GLSL}\nuniform float uPhase;\nuniform float uSwing;\nuniform float uSit;`;
     const phaseExpr = mode === 'instanced' ? 'aPhase' : 'uPhase';
     const swingExpr = mode === 'instanced' ? 'aSwing' : 'uSwing';
+    const sitExpr = mode === 'instanced' ? '0.0' : 'uSit'; // only the player sits
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${head}`)
@@ -68,7 +84,7 @@ export function applyWalkShader(
       )
       .replace(
         '#include <begin_vertex>',
-        `#include <begin_vertex>\nfloat cwPhase = ${phaseExpr};\nfloat cwAmp = ${swingExpr};\n${WALK_GLSL}`,
+        `#include <begin_vertex>\nfloat cwPhase = ${phaseExpr};\nfloat cwAmp = ${swingExpr};\nfloat cwSit = ${sitExpr};\n${WALK_GLSL}`,
       );
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <common>',

@@ -135,6 +135,12 @@ export class Soundscape {
     setTimeout(() => this.tone(240, 'sine', 0.25, 0.08), 160);
   }
 
+  /** Urgent two-tone alert (seated-theft tell). */
+  alert(): void {
+    this.tone(880, 'square', 0.09, 0.16);
+    setTimeout(() => this.tone(880, 'square', 0.09, 0.16), 140);
+  }
+
   /** Results jingle: rising for success, sagging for a knockout. */
   jingle(success: boolean): void {
     const notes = success ? [523, 659, 784, 1046] : [392, 330, 262];

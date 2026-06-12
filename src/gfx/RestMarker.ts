@@ -27,6 +27,7 @@ function emojiTexture(emoji: string): CanvasTexture {
 export class RestMarker {
   private chaSprite: Sprite;
   private benchSprite: Sprite;
+  private alertSprite: Sprite;
   private time = 0;
 
   constructor(scene: Scene) {
@@ -36,11 +37,26 @@ export class RestMarker {
     this.benchSprite = new Sprite(
       new SpriteMaterial({ map: emojiTexture('🪑'), depthTest: false, transparent: true }),
     );
-    for (const s of [this.chaSprite, this.benchSprite]) {
+    this.alertSprite = new Sprite(
+      new SpriteMaterial({ map: emojiTexture('❗'), depthTest: false, transparent: true }),
+    );
+    for (const s of [this.chaSprite, this.benchSprite, this.alertSprite]) {
       s.scale.set(1.5, 1.5, 1);
       s.visible = false;
       s.renderOrder = 5;
       scene.add(s);
+    }
+  }
+
+  /** ❗ over the creeping thief during the seated-theft minigame. */
+  updateAlert(target: { x: number; z: number } | null): void {
+    this.alertSprite.visible = target !== null;
+    if (target) {
+      // Urgent jitter, faster than the calm rest bob.
+      const shake = Math.sin(this.time * 22) * 0.06;
+      this.alertSprite.position.set(target.x + shake, 2.5 + Math.sin(this.time * 9) * 0.12, target.z);
+      const pulse = 1.4 + Math.sin(this.time * 12) * 0.18;
+      this.alertSprite.scale.set(pulse, pulse, 1);
     }
   }
 
@@ -57,7 +73,7 @@ export class RestMarker {
   }
 
   dispose(scene: Scene): void {
-    for (const s of [this.chaSprite, this.benchSprite]) {
+    for (const s of [this.chaSprite, this.benchSprite, this.alertSprite]) {
       scene.remove(s);
       s.material.map?.dispose();
       s.material.dispose();

@@ -30,7 +30,8 @@ const STARE_RANGE_T = 4;
 const STRIKE_RANGE = 0.85;
 const WALK_STEAL_FRACTION = 0.18;
 const PHONE_STEAL_FRACTION = 0.2; // hard cap per check (idea.md §2.4)
-const SEATED_TELL_TIME = 1.0;
+/** Long enough to read the "shoo him!" minigame, short enough to sting. */
+export const SEATED_TELL_TIME = 1.6;
 
 export interface PickpocketConfig {
   /** 1-5 route risk → spawn pressure. */
@@ -56,6 +57,12 @@ export class PickpocketSystem {
   /** Seated-theft tell countdown (>0 = a pocketmar approaches the bench). */
   seatedTell = 0;
   private seatedThief = -1;
+
+  /** Position of the thief mid-tell (for the ❗ marker), or null. */
+  get seatedThiefPos(): { s: number; t: number } | null {
+    if (this.seatedTell <= 0 || this.seatedThief < 0) return null;
+    return { s: this.s[this.seatedThief]!, t: this.t[this.seatedThief]! };
+  }
   private spawnTimer = 4;
 
   config: PickpocketConfig = { risk: 2, canSpawn: () => true };
@@ -208,6 +215,11 @@ export class PickpocketSystem {
     }
     if (this.seatedTell > 0) {
       this.seatedTell -= dt;
+      // The thief creeps toward the bench as the tell runs out.
+      if (this.seatedThief >= 0) {
+        this.s[this.seatedThief]! += (player.s + 0.8 - this.s[this.seatedThief]!) * dt * 1.6;
+        this.t[this.seatedThief]! += (player.t - this.t[this.seatedThief]!) * dt * 1.6;
+      }
       if (this.seatedTell <= 0 && this.seatedThief >= 0) {
         // Missed the tell: lose taka.
         score.steal(Math.floor(score.taka * 0.12), 'seated');
@@ -228,6 +240,7 @@ export class PickpocketSystem {
         this.suspicion[slot] = 1;
         this.seatedThief = slot;
         this.seatedTell = SEATED_TELL_TIME;
+        this.bus.emit('seatedTellStarted', {});
       }
     }
   }
