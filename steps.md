@@ -139,3 +139,11 @@
 - [x] Real sit pose: shader fold (legs forward at hip, body sinks onto bench, arms forward "holding the cha") eased in/out via uSit uniform; avatar walks to the bench point (street side of the stall, never inside it) and turns to face the street; cinematic high three-quarter camera frames the seated character
 - [x] Seated-theft minigame made visible: thief creeps toward the bench during a 1.6 s tell with a pulsing ❗ marker overhead, red alert pill ("Pocketmar reaching for your pocket!") with draining timer bar + F/👀 hint, two-tone audio alert; shoo = +5 taka, miss = -12% wallet
 - **2026-06-12 (h)**: M14 verified by screenshots (sit pose at cha dokan, alert minigame mid-tell).
+
+## M15 — Cartoon Pivot + Crossy Crossing (user feedback round 4) ✅
+- [x] Candy-color art direction: per-building palette (10 candy tones by position hash; mosques/landmarks keep signature tints), bright cartoon skies (cream/cyan/peach), vivid crowd shirts
+- [x] Real English names everywhere: bake prefers name:en (Latin-script heuristic), hospitals/clinics/pharmacies/banks fetched (+ school/hospital ways), refetched + re-baked all 6 areas; signboards extended to hospitals/schools/landmarks + rooftop title boards on named real buildings (up to 20/route)
+- [x] Traffic rework: perpendicular crossing waves REPLACED by (a) constant oncoming stream on a left-side road (3 lanes, dashed markings, 8–16 m/s, never collides — pure dread) and (b) Crossy-Roads 2D minigame at major roads (canvas overlay, candy cars, hop grid, swipe/tap/arrows, lanes+speed scale with traffic stat; crossed = bonus + teleport past, hit = 32 dmg + knockback, overbridge skip = safe, -18 stamina)
+- [x] Right-side street dressing only (rickshaws/poles); left-side rest spots excluded (across the road); road ribbon + instanced lane dashes
+- [x] Traffic tests rewritten (pendingZone trigger, outcome application, stream no-collision, overbridge); minigame e2e test (opens at zone, overbridge resolves); 75 unit + 7 e2e green
+- **2026-06-12 (i)**: M15 verified by screenshots (cartoon street w/ oncoming truck/CNG stream on dashed road, Crossy minigame with candy cars).

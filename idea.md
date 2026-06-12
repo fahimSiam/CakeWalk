@@ -252,3 +252,8 @@ tools/osm/           # Build-time OSM fetch + bake pipeline
 - **Sand Watch**: ships in MVP — nothing deferred to update 1.
 - **Services**: local-first now; Firebase/AdMob post-launch via adapters.
 - **Launch plan**: geofenced BD soft launch → tune with real players → global launch with "explore Dhaka" framing.
+
+## 12. Rev 6 — Cartoon Pivot (resolved with user)
+- **Aesthetic**: 90s-cartoon / Fall Guys / Among Us — candy-color buildings (per-building palette hash), bright skies, vivid crowd shirts, rounded chunky shapes. Photorealism (Google Street View / Maps 3D data) is legally unusable; the identity is *colorful Dhaka*, with REAL data underneath: real street layouts, real building footprints & heights, and **real English names** from OSM (shops, schools, hospitals, banks, named buildings) on signboards and rooftop title boards.
+- **Street layout**: the player walks the footpath; the **traffic road runs on the LEFT** with dashed lanes and a constant **oncoming vehicle stream** (bus/CNG/rickshaw/bike, 8–16 m/s) — the vehicular mirror of the oncoming crowd. Buildings/stalls/props dress the RIGHT.
+- **Road crossing = Crossy-Roads minigame**: arriving at a major road opens a top-down 2D lane-hopper (swipe/tap or arrows; lanes & speed scale with the road's traffic stat 3–7 lanes). Reach the far footpath = bonus and the run continues past the road; get hit = damage + knocked back to try again; the overbridge button inside the minigame is the safe skip (costs stamina, no bonus).

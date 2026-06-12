@@ -104,46 +104,74 @@ describe('PickpocketSystem', () => {
 });
 
 describe('TrafficSystem', () => {
-  it('crossing directly past the zone pays a bonus', () => {
+  it('arriving at a zone raises pendingZone for the minigame', () => {
     const { bus, rng, player, score } = setup();
     const traffic = new TrafficSystem(rng.stream('t'), bus);
     traffic.setZones([{ s: 20, difficulty: 3, halfWidth: 4.5, crossed: false }]);
-    let resolved: string | null = null;
-    bus.on('crossingResolved', (e) => (resolved = e.method));
-    player.s = 25; // beyond the far edge
+    let entered = false;
+    bus.on('crossingEntered', () => (entered = true));
+    player.s = 19;
     traffic.fixedUpdate(DT, player, score);
     bus.flush();
-    expect(resolved).toBe('direct');
-    expect(score.taka).toBeGreaterThan(0);
+    expect(traffic.pendingZone).not.toBeNull();
+    expect(entered).toBe(true);
   });
 
-  it('vehicle overlap damages and knocks back the player', () => {
+  it('minigame outcomes apply: crossed pays, hit hurts and knocks back, skip is safe', () => {
     const { bus, rng, player, score } = setup();
     const traffic = new TrafficSystem(rng.stream('t'), bus);
-    traffic.setZones([{ s: 20, difficulty: 3, halfWidth: 4.5, crossed: false }]);
-    traffic.vActive[0] = 1;
-    traffic.vKind[0] = 0; // bus
-    traffic.vS[0] = 20;
-    traffic.vT[0] = 0;
-    traffic.vDir[0] = 1;
-    player.s = 20;
-    player.t = 0;
+    traffic.setZones([
+      { s: 20, difficulty: 3, halfWidth: 4.5, crossed: false },
+      { s: 80, difficulty: 3, halfWidth: 4.5, crossed: false },
+      { s: 140, difficulty: 3, halfWidth: 4.5, crossed: false },
+    ]);
+    const [z1, z2, z3] = traffic.zones;
+    traffic.resolveCrossing(z1!, 'crossed', player, score);
+    expect(z1!.crossed).toBe(true);
+    expect(score.taka).toBeGreaterThan(0);
+    expect(player.s).toBeGreaterThan(20);
+
+    player.s = 79;
+    traffic.resolveCrossing(z2!, 'hit', player, score);
+    expect(z2!.crossed).toBe(false); // must try again
+    expect(player.health).toBeLessThan(100);
+    expect(player.s).toBeLessThan(79); // knocked back
+
+    player.s = 139;
+    const takaBefore = score.taka;
+    traffic.resolveCrossing(z3!, 'skipped', player, score);
+    expect(z3!.crossed).toBe(true);
+    expect(score.taka).toBe(takaBefore); // no bonus on the overbridge
+    expect(player.s).toBeGreaterThan(140);
+  });
+
+  it('stream traffic flows toward the player and never collides', () => {
+    const { bus, rng, player, score } = setup();
+    const traffic = new TrafficSystem(rng.stream('t'), bus);
+    traffic.setZones([]);
     let hit = false;
     bus.on('vehicleHit', () => (hit = true));
-    traffic.fixedUpdate(DT, player, score);
-    bus.flush();
-    expect(hit).toBe(true);
-    expect(player.health).toBeLessThan(100);
-    expect(player.s).toBeLessThan(20); // knocked back
+    for (let i = 0; i < 30 * 30; i++) {
+      traffic.fixedUpdate(DT, player, score);
+      player.s += 2.4 * DT;
+      bus.flush();
+    }
+    let sawActive = 0;
+    for (let i = 0; i < traffic.vActive.length; i++) if (traffic.vActive[i]) sawActive++;
+    expect(sawActive).toBeGreaterThan(0);
+    expect(hit).toBe(false);
+    // All stream vehicles live on the road lanes (left of the footpath).
+    for (let i = 0; i < traffic.vActive.length; i++) {
+      if (traffic.vActive[i]) expect(traffic.vT[i]!).toBeLessThan(-4);
+    }
   });
 
-  it('overbridge lifts the player safely across', () => {
+  it('overbridge from a pending zone lifts the player safely across', () => {
     const { bus, rng, player, score } = setup();
     const traffic = new TrafficSystem(rng.stream('t'), bus);
     traffic.setZones([{ s: 20, difficulty: 5, halfWidth: 4.5, crossed: false }]);
-    player.s = 16;
-    traffic.fixedUpdate(DT, player, score); // sets inZone
-    expect(traffic.inZone).not.toBeNull();
+    player.s = 19;
+    traffic.fixedUpdate(DT, player, score); // raises pendingZone
     expect(traffic.useOverbridge(player)).toBe(true);
     let method: string | null = null;
     bus.on('crossingResolved', (e) => (method = e.method));

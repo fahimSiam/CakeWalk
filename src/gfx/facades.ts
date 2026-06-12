@@ -123,31 +123,31 @@ const SIGN_PALETTES = [
   { bg: '#5b2d7a', fg: '#ffffff' },
 ];
 
-/** A shop signboard with a real (OSM) name. Bengali renders natively. */
-export function makeSignboard(name: string, seed: number): Mesh {
+/** A signboard with a real (OSM) name; `big` = building/institution title. */
+export function makeSignboard(name: string, seed: number, big = false): Mesh {
   const pal = SIGN_PALETTES[seed % SIGN_PALETTES.length]!;
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
+  canvas.width = big ? 384 : 256;
   canvas.height = 72;
   const g = canvas.getContext('2d')!;
   g.fillStyle = pal.bg;
-  g.fillRect(0, 0, 256, 72);
+  g.fillRect(0, 0, canvas.width, 72);
   g.strokeStyle = pal.fg;
   g.lineWidth = 4;
-  g.strokeRect(4, 4, 248, 64);
+  g.strokeRect(4, 4, canvas.width - 8, 64);
   g.fillStyle = pal.fg;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  let label = name.length > 22 ? name.slice(0, 21) + '…' : name;
-  g.font = `bold ${label.length > 14 ? 22 : 28}px system-ui, 'Noto Sans Bengali', sans-serif`;
-  g.fillText(label, 128, 38);
+  const max = big ? 30 : 22;
+  const label = name.length > max ? name.slice(0, max - 1) + '…' : name;
+  g.font = `bold ${label.length > 16 ? 22 : 28}px system-ui, 'Noto Sans Bengali', sans-serif`;
+  g.fillText(label, canvas.width / 2, 38);
   const tex = new CanvasTexture(canvas);
   tex.colorSpace = SRGBColorSpace;
-  const mesh = new Mesh(
-    new PlaneGeometry(2.6, 0.74),
+  return new Mesh(
+    new PlaneGeometry(big ? 4.4 : 2.6, big ? 0.84 : 0.74),
     new MeshBasicMaterial({ map: tex, side: DoubleSide }),
   );
-  return mesh;
 }
 
 /** Lambert material for textured facade walls (vertex tint × texture). */

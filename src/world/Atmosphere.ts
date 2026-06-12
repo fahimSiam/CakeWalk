@@ -31,10 +31,11 @@ export interface AtmosphereMods {
   agentWidthAdd: number;
 }
 
+// Rev 6 cartoon palette: bright, saturated, Fall-Guys-cheerful skies.
 const PALETTES: Record<TimeOfDay, { sky: string; fogNear: number; hemi: number; sun: number }> = {
-  morning: { sky: '#d8c4a0', fogNear: 35, hemi: 1.1, sun: 1.0 },
-  noon: { sky: '#cfd4cf', fogNear: 45, hemi: 1.25, sun: 1.35 },
-  evening: { sky: '#c79b6e', fogNear: 28, hemi: 0.85, sun: 0.9 },
+  morning: { sky: '#ffe3b3', fogNear: 40, hemi: 1.15, sun: 1.05 },
+  noon: { sky: '#9fd9f0', fogNear: 50, hemi: 1.3, sun: 1.35 },
+  evening: { sky: '#ffb27d', fogNear: 34, hemi: 0.95, sun: 0.95 },
 };
 
 export function rollAtmosphere(rng: RngStream, hasUmbrella: boolean): AtmosphereMods {

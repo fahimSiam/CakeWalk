@@ -39,14 +39,23 @@ import {
 
 const BUILD_RADIUS = 130;
 
-// Brighter than before: these now MULTIPLY the facade texture.
+// Rev 6 cartoon pivot: Fall-Guys candy palette, picked per building by
+// position hash so every street is a row of colorful blocks.
+const CANDY: Color[] = [
+  '#ffb3c7', '#9fe8d8', '#ffe08a', '#a8cfff', '#d4b8ff',
+  '#b5e89a', '#ffc89a', '#9fe0ef', '#f3a8a8', '#cfe8a0',
+].map((c) => new Color(c));
 const KIND_COLORS: Record<string, Color> = {
-  residential: new Color('#d9c9ae'),
-  commercial: new Color('#b9c4d6'),
-  mosque: new Color('#abdcc0'),
-  market: new Color('#e0b48e'),
-  landmark: new Color('#ecdcb8'),
+  mosque: new Color('#b2f0d4'), // mosques/landmarks keep calmer signature tones
+  landmark: new Color('#f5e9c0'),
 };
+
+function candyFor(c: Vec2, kind: string): Color {
+  const fixed = KIND_COLORS[kind];
+  if (fixed) return fixed;
+  const h = (Math.abs(Math.round(c[0] * 7 + c[1] * 13)) | 0) % CANDY.length;
+  return CANDY[h]!;
+}
 
 export interface PlacedProp {
   kind: BakedPoi['kind'];
@@ -125,8 +134,36 @@ export class LevelRenderer {
   }
 
   private addRouteRibbon(routePts: Vec2[]): void {
-    const g = ribbon(routePts, 7.6, 0.03, new Color('#9b9484'));
+    // Footpath the player walks (warm, cartoon-clean).
+    const g = ribbon(routePts, 7.6, 0.03, new Color('#b8a98e'));
     if (g) this.group.add(new Mesh(g, new MeshLambertMaterial({ vertexColors: true })));
+
+    // The traffic road runs on the LEFT of the footpath: dark ribbon with
+    // dashed lane lines — the oncoming vehicle stream lives here.
+    const roadCenter = offsetPolyline(routePts, -6.9);
+    const road = ribbon(roadCenter, 7.0, 0.02, new Color('#3c4750'));
+    if (road) this.group.add(new Mesh(road, new MeshLambertMaterial({ vertexColors: true })));
+    const dashGeo = new BoxGeometry(0.18, 0.02, 2.2);
+    const dashes: { pos: Vec2; angle: number }[] = [];
+    walkAlong(roadCenter, 6.5, 0, (pos, normal) => {
+      // normal = (-dz, dx) → path direction = (normal[1], -normal[0]).
+      dashes.push({ pos, angle: Math.atan2(normal[1], -normal[0]) });
+    });
+    if (dashes.length) {
+      const mesh = new InstancedMesh(
+        paintColored(dashGeo, new Color('#e8e3d8')),
+        new MeshLambertMaterial({ vertexColors: true }),
+        dashes.length,
+      );
+      const m = new Matrix4();
+      const q = new Quaternion();
+      dashes.forEach((d, i) => {
+        q.setFromAxisAngle(new Vector3(0, 1, 0), d.angle);
+        m.compose(new Vector3(d.pos[0], 0.04, d.pos[1]), q, new Vector3(1, 1, 1));
+        mesh.setMatrixAt(i, m);
+      });
+      this.group.add(mesh);
+    }
   }
 
   private addPolys(polys: Vec2[][], color: string, y: number): void {
@@ -160,7 +197,7 @@ export class LevelRenderer {
       const c = centroid(b.footprint);
       if (!near(c)) continue;
       const { walls, roof } = extrudeFootprint(b.footprint, b.height);
-      paintGeometry(walls, KIND_COLORS[b.kind] ?? KIND_COLORS.residential!);
+      paintGeometry(walls, candyFor(c, b.kind));
       paintGeometry(roof, ROOF_TINT);
       const style = FACADE_FOR_KIND[b.kind] ?? 'residential';
       let list = wallsByStyle.get(style);
@@ -182,24 +219,35 @@ export class LevelRenderer {
     }
   }
 
-  /** Real OSM shop/POI names on signboards beside the route (Dhaka's wall of signage). */
+  /** Real OSM names on signboards + building title boards (Dhaka's wall of signage). */
   private addSignboards(area: BakedArea, routePts: Vec2[]): void {
-    const named = area.pois.filter(
-      (p) =>
-        p.name &&
-        (p.kind === 'shop' || p.kind === 'market' || p.kind === 'chaDokan' || p.kind === 'school' || p.kind === 'mosque'),
-    );
+    const SIGN_KINDS = new Set(['shop', 'market', 'chaDokan', 'school', 'mosque', 'hospital', 'landmark']);
+    const named = area.pois.filter((p) => p.name && SIGN_KINDS.has(p.kind));
     let count = 0;
     for (const poi of named) {
-      if (count >= 36) break;
+      if (count >= 40) break;
       const { dist, dirX, dirZ } = nearestOnRoute(poi.pos, routePts);
       if (dist > 16) continue;
-      const sign = makeSignboard(poi.name!, count);
-      sign.position.set(poi.pos[0], 2.7 + (count % 3) * 0.35, poi.pos[1]);
+      const big = poi.kind === 'hospital' || poi.kind === 'school' || poi.kind === 'landmark';
+      const sign = makeSignboard(poi.name!, count, big);
+      sign.position.set(poi.pos[0], (big ? 3.6 : 2.7) + (count % 3) * 0.35, poi.pos[1]);
       // Face along the street so it reads while walking past.
       sign.rotation.y = Math.atan2(dirX, dirZ) + Math.PI / 2;
       this.group.add(sign);
       count++;
+    }
+    // Named real buildings get rooftop title boards (English where OSM has it).
+    let titles = 0;
+    for (const b of area.buildings) {
+      if (!b.name || titles >= 20) continue;
+      const c = centroid(b.footprint);
+      const { dist, dirX, dirZ } = nearestOnRoute(c, routePts);
+      if (dist > 28) continue;
+      const board = makeSignboard(b.name, 7 + titles, true);
+      board.position.set(c[0], b.height + 1.1, c[1]);
+      board.rotation.y = Math.atan2(dirX, dirZ) + Math.PI / 2;
+      this.group.add(board);
+      titles++;
     }
   }
 
@@ -251,19 +299,18 @@ export class LevelRenderer {
    * alternating sides, offset just past the corridor edge.
    */
   private addStreetClutter(route: Vec2[]): void {
+    // Everything on the RIGHT (+normal): the left is the traffic road.
     const rickshaws: { pos: Vec2; angle: number }[] = [];
     const poles: { pos: Vec2; angle: number }[] = [];
     walkAlong(route, 45, 17, (pos, normal, k) => {
-      const side = k % 2 === 0 ? 1 : -1;
       rickshaws.push({
-        pos: [pos[0] + normal[0] * 4.3 * side, pos[1] + normal[1] * 4.3 * side],
-        angle: Math.atan2(normal[0], normal[1]) + (side > 0 ? 0.4 : -0.4),
+        pos: [pos[0] + normal[0] * 4.3, pos[1] + normal[1] * 4.3],
+        angle: Math.atan2(normal[0], normal[1]) + (k % 2 === 0 ? 0.4 : -0.3),
       });
     });
-    walkAlong(route, 28, 9, (pos, normal, k) => {
-      const side = k % 2 === 0 ? -1 : 1;
+    walkAlong(route, 28, 9, (pos, normal) => {
       poles.push({
-        pos: [pos[0] + normal[0] * 3.6 * side, pos[1] + normal[1] * 3.6 * side],
+        pos: [pos[0] + normal[0] * 3.9, pos[1] + normal[1] * 3.9],
         angle: 0,
       });
     });
@@ -287,6 +334,22 @@ export class LevelRenderer {
     place(rickshaws, buildRickshawGeometry());
     place(poles, utilityPoleGeometry());
   }
+}
+
+/** Shift a polyline laterally by `off` meters (negative = left of travel). */
+function offsetPolyline(pts: Vec2[], off: number): Vec2[] {
+  const out: Vec2[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const prev = pts[Math.max(0, i - 1)]!;
+    const next = pts[Math.min(pts.length - 1, i + 1)]!;
+    let dx = next[0] - prev[0];
+    let dz = next[1] - prev[1];
+    const len = Math.hypot(dx, dz) || 1;
+    dx /= len;
+    dz /= len;
+    out.push([pts[i]![0] + -dz * off, pts[i]![1] + dx * off]);
+  }
+  return out;
 }
 
 /** Walk a polyline emitting a point+normal every `spacing` meters. */

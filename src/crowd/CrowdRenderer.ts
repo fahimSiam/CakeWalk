@@ -28,11 +28,12 @@ import {
 import { applyWalkShader } from '@/gfx/walkShader';
 import type { Corridor, PathPose } from '@/world/Corridor';
 
+// Rev 6: candy-bright crowd (Among-Us-vivid solids).
 const SHIRTS: Record<string, string[]> = {
-  male: ['#4a6fa5', '#7a5c43', '#3e7d5a', '#8a8f98', '#5d4a7a', '#36617a'],
-  female: ['#c2577a', '#7a4a9e', '#2e8b8b', '#c27a3d', '#9e3d4a', '#3d7a9e'],
-  vendor: ['#b08a3e', '#8f6f2f', '#a0522d'],
-  worker: ['#6b705c', '#936639', '#7f4f24'],
+  male: ['#4f8fe8', '#ff8a5b', '#3ecf8e', '#b48aff', '#ffd24d', '#46c4d6'],
+  female: ['#ff6f9e', '#9a6bff', '#2fc4b2', '#ff9d3d', '#e8527a', '#5aa9ff'],
+  vendor: ['#e8b13d', '#cf8a2f', '#d6764a'],
+  worker: ['#8fa05c', '#c98a4a', '#a8703d'],
 };
 
 /** Which overlay prop an archetype carries. */

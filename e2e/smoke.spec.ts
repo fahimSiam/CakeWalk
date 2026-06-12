@@ -102,6 +102,48 @@ test('first launch shows the menu with a tutorial card that starts the tutorial'
   expect(errors).toEqual([]);
 });
 
+test('crossing minigame opens at a major road and resolves', async ({ page }) => {
+  await page.goto('/?seed=7&area=gulistan');
+  await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
+  await page.evaluate(() => {
+    const rs = window.__cakewalk.ctx.testApi.routeSelect as {
+      routes: { crossings: number }[];
+      start(i: number): void;
+    };
+    let best = 0;
+    rs.routes.forEach((r, i) => {
+      if (r.crossings > rs.routes[best]!.crossings) best = i;
+    });
+    rs.start(best);
+  });
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+  await page.evaluate(() => {
+    window.__cakewalk.loop.timeScale = 0;
+    const api = window.__cakewalk;
+    const run = api.ctx.testApi.run as {
+      player: { health: number };
+      traffic: { pendingZone: unknown };
+    };
+    for (let i = 0; i < 30 * 600 && !run.traffic.pendingZone; i++) {
+      api.inject({ speed: 1 });
+      api.step(1);
+      run.player.health = 100;
+    }
+    api.step(1); // open the minigame
+  });
+  await page.waitForSelector('#cw-skip', { timeout: 5000 });
+  // Take the overbridge: zone resolves as crossed, run resumes.
+  await page.click('#cw-skip');
+  await page.waitForSelector('#cw-skip', { state: 'detached', timeout: 5000 });
+  const crossed = await page.evaluate(() => {
+    const run = window.__cakewalk.ctx.testApi.run as {
+      traffic: { zones: { crossed: boolean }[]; pendingZone: unknown };
+    };
+    return run.traffic.zones.some((z) => z.crossed) && !run.traffic.pendingZone;
+  });
+  expect(crossed).toBe(true);
+});
+
 test('player advances and earns taka with injected sprint input', async ({ page }) => {
   await page.goto('/?seed=7&graybox=1');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);

@@ -39,6 +39,7 @@ import { PhoneOverlay } from '@/ui/PhoneOverlay';
 import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
 import { RestMarker } from '@/gfx/RestMarker';
+import { CrossingMinigame } from '@/ui/CrossingMinigame';
 import {
   OUTFIT_COLORS,
   localDateKey,
@@ -134,6 +135,7 @@ export class RunState implements GameState {
   private camInit = false;
   private camLook = { x: 0, z: 0 };
   private restMarker!: RestMarker;
+  private crossingGame = new CrossingMinigame();
 
   constructor(private ctx: GameContext) {}
 
@@ -415,8 +417,10 @@ export class RunState implements GameState {
         const dx = poi.pos[0] - pose.x;
         const dz = poi.pos[1] - pose.z;
         if (dx * dx + dz * dz > 12 * 12) continue;
-        // Lateral offset = projection on the path normal.
+        // Lateral offset = projection on the path normal. The LEFT (t<0) is
+        // the traffic road now — only right-side spots are reachable.
         const t = dx * -pose.dirZ + dz * pose.dirX;
+        if (t < -2) continue;
         points.push({ kind: poi.kind, s, t, fruit: poi.kind === 'tree' });
       }
     } else if (!area) {
@@ -449,6 +453,7 @@ export class RunState implements GameState {
     this.trafficRenderer.dispose(this.scene);
     this.lifeRenderer.dispose(this.scene);
     this.restMarker.dispose(this.scene);
+    this.crossingGame.dispose();
     this.level?.dispose(this.scene);
     this.level = null;
     this.atmosphereHandle.dispose();
@@ -473,6 +478,8 @@ export class RunState implements GameState {
 
   fixedUpdate(dt: number): void {
     if (this.finished) return;
+    // The Crossy-Roads crossing owns the screen; street time is frozen.
+    if (this.crossingGame.active) return;
 
     // Sand Watch rewind owns the tick while active.
     const rewind = this.sandWatch.fixedUpdate(dt);
@@ -521,6 +528,17 @@ export class RunState implements GameState {
     if (!wasExhausted && this.player.exhausted) this.bus.emit('staminaEmpty', {});
     this.crowd.fixedUpdate(dt, this.player);
     this.traffic.fixedUpdate(dt, this.player, this.score);
+    // Arriving at a major road → the Crossy-Roads minigame takes over.
+    const zone = this.traffic.pendingZone;
+    if (zone && !this.crossingGame.active && this.traffic.overbridgeTimer <= 0) {
+      const outfit =
+        OUTFIT_COLORS[this.ctx.save.get().equippedOutfit] ?? OUTFIT_COLORS.default!;
+      void this.crossingGame.open(zone.difficulty, outfit).then((result) => {
+        this.traffic.resolveCrossing(zone, result, this.player, this.score);
+        this.prevS = this.player.s;
+        this.prevT = this.player.t;
+      });
+    }
     this.pickpockets.fixedUpdate(dt, this.player, this.score, this.corridor.halfWidth(this.player.s));
     this.streetLife.fixedUpdate(dt, this.player, this.crowd);
     this.interactions.fixedUpdate(dt, this.player, this.score);
@@ -724,7 +742,7 @@ export class RunState implements GameState {
         ? (this.interactions.nearRest.kind as 'chaDokan' | 'busStop')
         : null,
       this.player.resting,
-      this.traffic.inZone !== null && this.traffic.overbridgeTimer <= 0,
+      false, // crossings are handled by the minigame overlay now
     );
     this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
     this.rewindFx.frame(frameDt);

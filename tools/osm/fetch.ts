@@ -18,7 +18,8 @@ function buildQuery(bbox: [number, number, number, number]): string {
 (
   way[highway~"^(primary|secondary|trunk|tertiary|residential|living_street|unclassified|service|footway|path|pedestrian)$"];
   way[building];
-  node[amenity~"^(marketplace|cafe|restaurant|fast_food|place_of_worship|bus_station|school|college|university)$"];
+  node[amenity~"^(marketplace|cafe|restaurant|fast_food|place_of_worship|bus_station|school|college|university|hospital|clinic|pharmacy|bank)$"];
+  way[amenity~"^(hospital|school|college|university)$"];
   node[shop];
   node[highway=bus_stop];
   node[historic];

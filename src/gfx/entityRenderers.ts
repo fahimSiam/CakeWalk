@@ -169,9 +169,8 @@ export class TrafficRenderer {
       const mesh = this.kindMeshes[ki]!;
       this.corridor.toWorld(tr.vS[i]!, tr.vT[i]!, this.pose);
       this.dummy.position.set(this.pose.x, 0, this.pose.z);
-      const nx = -this.pose.dirZ;
-      const nz = this.pose.dirX;
-      this.dummy.rotation.set(0, Math.atan2(nx * tr.vDir[i]!, nz * tr.vDir[i]!), 0);
+      // Stream traffic drives along the road, opposite the player (-s).
+      this.dummy.rotation.set(0, Math.atan2(-this.pose.dirX, -this.pose.dirZ), 0);
       const scale = this.kindScale[ki];
       if (scale != null) this.dummy.scale.setScalar(scale);
       else this.dummy.scale.set(kind.width, kind.height, kind.length);
