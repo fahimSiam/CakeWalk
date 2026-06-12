@@ -130,3 +130,7 @@
 
 ## Log (continued 2)
 - **2026-06-12 (f)**: M12 — smooth corners, sectioned crowd density, rest fix + markers, wider roads, music, Kenney vehicle models + better creature models, facade textures + real shop-name signboards. Note: Google Street View / Maps 3D data is legally unusable (ToS); realism path = OSM data + procedural facades + real OSM signage.
+
+## M13 — Sit Prompt Popup (user feedback) ✅
+- [x] San Andreas-style action prompt: the moment a stall/bench is in sitting range, a bordered pill pops in (spring scale-in + glow pulse) above the buttons — "☕ Cha break [G] sit" on keyboard, "tap 🪑" on touch; disappears on leave/sit; works alongside the floating ☕/🪑 world marker
+- **2026-06-12 (g)**: M13 sit prompt verified by screenshot next to a live cha dokan.

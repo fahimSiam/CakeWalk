@@ -49,6 +49,19 @@ export class Hud {
           background:rgba(0,0,0,.55);border-radius:10px;padding:8px 10px;font:11px/1.7 monospace;
           color:#ddd;pointer-events:auto;display:none}
         .cw-keys b{color:#ffd34a}
+        .cw-prompt{position:absolute;left:50%;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 150px);
+          transform:translateX(-50%);display:none;align-items:center;gap:10px;
+          background:rgba(20,14,6,.88);border:2px solid #e8a33d;border-radius:14px;
+          padding:10px 16px;color:#fff;font:700 15px system-ui;white-space:nowrap;
+          box-shadow:0 4px 20px rgba(232,163,61,.35)}
+        .cw-prompt.cw-pop{animation:cwPop .28s cubic-bezier(.34,1.56,.64,1),cwPulse 1.6s .3s ease-in-out infinite}
+        .cw-prompt .cw-key{display:inline-flex;align-items:center;justify-content:center;
+          min-width:30px;height:30px;padding:0 8px;border-radius:7px;background:#e8a33d;color:#1a1208;
+          font:900 15px system-ui;box-shadow:0 2px 0 #a8721f}
+        @keyframes cwPop{0%{transform:translateX(-50%) scale(.4);opacity:0}
+          70%{transform:translateX(-50%) scale(1.08)}100%{transform:translateX(-50%) scale(1);opacity:1}}
+        @keyframes cwPulse{0%,100%{box-shadow:0 4px 20px rgba(232,163,61,.35)}
+          50%{box-shadow:0 4px 30px rgba(232,163,61,.75)}}
       </style>
       <div class="cw-bars">
         <div class="cw-bar cw-health"><div></div></div>
@@ -64,6 +77,7 @@ export class Hud {
       <button class="cw-btn cw-btn-watch">⏳</button>
       <button class="cw-btn cw-btn-bridge">🌉 overbridge</button>
       <div class="cw-crossing">⚠️ CROSSING — time the gap!<br><span style="font-size:13px;opacity:.85">or take the overbridge (safe, no bonus)</span></div>
+      <div class="cw-prompt"></div>
       <div class="cw-keys">
         <b>A/D</b> weave · <b>W</b> sprint · <b>S</b> slow<br>
         <b>Space</b> jump · <b>Q/E</b> dip (<b>Q+E</b> duck)<br>
@@ -130,14 +144,41 @@ export class Hud {
   private crossingEl!: HTMLDivElement;
   private crossingShown = false;
 
+  private promptShownFor: string | null = null;
+
   /** Contextual prompts: bench in range / inside a crossing zone. */
-  setContext(nearRest: boolean, resting: boolean, inCrossing: boolean): void {
+  setContext(
+    nearRest: 'chaDokan' | 'busStop' | null,
+    resting: boolean,
+    inCrossing: boolean,
+  ): void {
     this.sitBtn.style.display = nearRest || resting ? 'flex' : 'none';
     this.sitBtn.textContent = resting ? '🚶' : '🪑';
     this.bridgeBtn.style.display = inCrossing ? 'flex' : 'none';
     if (inCrossing !== this.crossingShown) {
       this.crossingShown = inCrossing;
       this.crossingEl.style.display = inCrossing ? 'block' : 'none';
+    }
+
+    // San-Andreas-style action prompt: pops in the moment sitting is possible.
+    const prompt = this.root.querySelector<HTMLDivElement>('.cw-prompt')!;
+    const key = nearRest && !resting ? nearRest : null;
+    if (key !== this.promptShownFor) {
+      this.promptShownFor = key;
+      if (key) {
+        const touch = 'ontouchstart' in window;
+        const what = key === 'chaDokan' ? '☕ Cha break' : '🪑 Rest';
+        prompt.innerHTML = touch
+          ? `${what}&nbsp;<span class="cw-key">tap 🪑</span>`
+          : `${what}&nbsp;<span class="cw-key">G</span>&nbsp;sit`;
+        prompt.style.display = 'flex';
+        prompt.classList.remove('cw-pop');
+        void prompt.offsetWidth; // restart the pop animation
+        prompt.classList.add('cw-pop');
+      } else {
+        prompt.style.display = 'none';
+        prompt.classList.remove('cw-pop');
+      }
     }
   }
 

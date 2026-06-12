@@ -679,7 +679,9 @@ export class RunState implements GameState {
       this.score.combo,
     );
     this.hud.setContext(
-      this.interactions.nearRest !== null,
+      this.interactions.nearRest
+        ? (this.interactions.nearRest.kind as 'chaDokan' | 'busStop')
+        : null,
       this.player.resting,
       this.traffic.inZone !== null && this.traffic.overbridgeTimer <= 0,
     );
