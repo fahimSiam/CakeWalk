@@ -23,6 +23,7 @@ export interface InputIntent {
   phone: boolean; // edge-triggered (toggle)
   sandWatch: boolean; // edge-triggered
   sit: boolean; // edge-triggered (context: near bench/cha dokan)
+  overbridge: boolean; // edge-triggered (context: at a crossing)
 }
 
 const TAP_MS = 150;
@@ -43,7 +44,14 @@ interface TouchTrack {
 
 export class InputSystem {
   private keys = new Set<string>();
-  private edges = { jump: false, stare: false, phone: false, sandWatch: false, sit: false };
+  private edges = {
+    jump: false,
+    stare: false,
+    phone: false,
+    sandWatch: false,
+    sit: false,
+    overbridge: false,
+  };
   private touches = new Map<number, TouchTrack>();
   private lateralTouch = 0;
   private rightHold: TouchTrack | null = null;
@@ -81,6 +89,9 @@ export class InputSystem {
   pressSit(): void {
     this.edges.sit = true;
   }
+  pressOverbridge(): void {
+    this.edges.overbridge = true;
+  }
   /** Test hook: inject a full intent for the next poll. */
   injected: Partial<InputIntent> | null = null;
 
@@ -112,9 +123,17 @@ export class InputSystem {
       phone: this.edges.phone,
       sandWatch: this.edges.sandWatch,
       sit: this.edges.sit,
+      overbridge: this.edges.overbridge,
     };
     if (k.has('KeyF')) k.delete('KeyF'); // stare is edge-triggered on keyboard too
-    this.edges = { jump: false, stare: false, phone: false, sandWatch: false, sit: false };
+    this.edges = {
+      jump: false,
+      stare: false,
+      phone: false,
+      sandWatch: false,
+      sit: false,
+      overbridge: false,
+    };
 
     if (this.injected) {
       const merged = { ...intent, ...this.injected };
@@ -134,6 +153,7 @@ export class InputSystem {
     else if (e.code === 'KeyM') this.edges.phone = true;
     else if (e.code === 'KeyR') this.edges.sandWatch = true;
     else if (e.code === 'KeyG') this.edges.sit = true;
+    else if (e.code === 'KeyB') this.edges.overbridge = true;
     else this.keys.add(e.code);
   };
 

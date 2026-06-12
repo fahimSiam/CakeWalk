@@ -45,14 +45,15 @@
 - [x] 40 unit + 3 e2e tests green; route-select + in-run screenshots verified
 - [ ] (deferred to M8 perf pass) chunk streaming — current route-radius filter holds 53k tris / 16 draws
 
-## M4 — Systems & Minigames
-- [ ] Road-crossing minigame: traffic waves (bus/CNG/rickshaw/bike), gap commit, median freeze, overbridge alternative
-- [ ] Pocketmar: tells (Turn + innocent same-direction walkers, Drift, micro-tells), suspicion scoring, Stare-Down (snap-target, 2.5 s CD), theft, glasses powerup, seated-theft tell, readability assist
-- [ ] Phone-check: stop + own-map overlay, blind window, 20% theft cap
-- [ ] Cha dokan / bus-stop rest (sit → stamina/health regen + seated theft risk)
-- [ ] Fruit trees (jump-grab → points/health)
-- [ ] Street life: sleeping dogs (bark-panic ripple), darting cats (stumble), dustbin smell clouds
-- [ ] Director: frustration budget caps, hawker/mama micro-events
+## M4 — Systems & Minigames ✅
+- [x] Road-crossing minigame: zones at majorCrossing route nodes, perpendicular vehicle waves (bus/CNG/rickshaw/weaving bike) in path coords, hit = damage + knockback, direct-cross bonus = 15×difficulty, overbridge button (auto-walk lift, safe, zero bonus); instanced vehicle renderer (1 draw call)
+- [x] Pocketmar: Disguised→Turn→Drift→Strike→Flee lifecycle, 25% innocent same-direction walkers, suspicion scoring, Stare-Down snap-target in facing cone (2.5 s CD; spotted = +10 & flee, innocent = combo halved), phone-locked steal = 20% cap, seated-theft 1 s tell (stare to shoo), glasses reveal flag (shop in M6); renderer blends them into crowd, reveals on Strike/glasses
+- [x] Phone-check: 2.5 s min/1 s cancel, blind+stationary, own-map canvas overlay from baked data (live position, route, destination — zero Google assets)
+- [x] Cha dokan (heal+stamina) / bus stop (stamina) rest, contextual 🪑 button, auto-stand when full
+- [x] Fruit trees: jump-grab at real OSM tree positions → +12 taka +6 HP, once per tree
+- [x] Street life: dogs (low obstacle; sprint near = bark + crowd panic), darting cats (combo break), dustbins (obstacle + smell-cloud crowd swerve)
+- [x] Director: pickpocket suppression after heavy bump 6 s / theft 12 s / bark 8 s; micro-events (hawker/directions/cha offer w/ brief slow)
+- [x] All systems snapshot/restore-ready; 55 unit + 3 e2e green
 
 ## M5 — Sand Watch
 - [ ] Snapshot/restore on every sim system (SoA slabs + RNG streams), 180-frame ring buffer

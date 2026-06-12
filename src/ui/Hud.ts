@@ -39,6 +39,11 @@ export class Hud {
         .cw-btn:active{background:rgba(255,255,255,.25)}
         .cw-btn-stare{right:14px;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px)}
         .cw-btn-phone{right:14px;top:calc(max(10px,env(safe-area-inset-top)) + 64px)}
+        .cw-btn-sit{left:14px;bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px);display:none}
+        .cw-btn-bridge{left:50%;transform:translateX(-50%);bottom:calc(max(14px,env(safe-area-inset-bottom)) + 76px);
+          width:auto;border-radius:14px;padding:0 18px;font-size:15px;font-weight:800;display:none}
+        .cw-crossing{position:absolute;top:34%;left:50%;transform:translateX(-50%);color:#ffd34a;
+          font:800 17px system-ui;text-shadow:0 2px 4px #000;display:none;text-align:center}
       </style>
       <div class="cw-bars">
         <div class="cw-bar cw-health"><div></div></div>
@@ -50,6 +55,9 @@ export class Hud {
       <div class="cw-toast"></div>
       <button class="cw-btn cw-btn-stare">👀</button>
       <button class="cw-btn cw-btn-phone">🗺️</button>
+      <button class="cw-btn cw-btn-sit">🪑</button>
+      <button class="cw-btn cw-btn-bridge">🌉 overbridge</button>
+      <div class="cw-crossing">⚠️ CROSSING — time the gap!<br><span style="font-size:13px;opacity:.85">or take the overbridge (safe, no bonus)</span></div>
     `;
     document.body.appendChild(this.root);
     this.healthFill = this.root.querySelector('.cw-health>div')!;
@@ -59,18 +67,36 @@ export class Hud {
     this.comboEl = this.root.querySelector('.cw-combo')!;
     this.toastEl = this.root.querySelector('.cw-toast')!;
 
-    const stare = this.root.querySelector<HTMLButtonElement>('.cw-btn-stare')!;
-    const phone = this.root.querySelector<HTMLButtonElement>('.cw-btn-phone')!;
-    stare.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-      input.pressStare();
-    });
-    stare.addEventListener('click', () => input.pressStare());
-    phone.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-      input.pressPhone();
-    });
-    phone.addEventListener('click', () => input.pressPhone());
+    const bind = (selector: string, fn: () => void): HTMLButtonElement => {
+      const el = this.root.querySelector<HTMLButtonElement>(selector)!;
+      el.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+        fn();
+      });
+      el.addEventListener('click', fn);
+      return el;
+    };
+    bind('.cw-btn-stare', () => input.pressStare());
+    bind('.cw-btn-phone', () => input.pressPhone());
+    this.sitBtn = bind('.cw-btn-sit', () => input.pressSit());
+    this.bridgeBtn = bind('.cw-btn-bridge', () => input.pressOverbridge());
+    this.crossingEl = this.root.querySelector('.cw-crossing')!;
+  }
+
+  private sitBtn!: HTMLButtonElement;
+  private bridgeBtn!: HTMLButtonElement;
+  private crossingEl!: HTMLDivElement;
+  private crossingShown = false;
+
+  /** Contextual prompts: bench in range / inside a crossing zone. */
+  setContext(nearRest: boolean, resting: boolean, inCrossing: boolean): void {
+    this.sitBtn.style.display = nearRest || resting ? 'flex' : 'none';
+    this.sitBtn.textContent = resting ? '🚶' : '🪑';
+    this.bridgeBtn.style.display = inCrossing ? 'flex' : 'none';
+    if (inCrossing !== this.crossingShown) {
+      this.crossingShown = inCrossing;
+      this.crossingEl.style.display = inCrossing ? 'block' : 'none';
+    }
   }
 
   set(health: number, stamina: number, meter: number, taka: number, combo: number): void {

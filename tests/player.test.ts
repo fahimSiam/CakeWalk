@@ -17,6 +17,7 @@ function intent(partial: Partial<InputIntent> = {}): InputIntent {
     phone: false,
     sandWatch: false,
     sit: false,
+    overbridge: false,
     ...partial,
   };
 }

@@ -129,6 +129,20 @@ export class CrowdSystem {
     this.resolvePlayerInteractions(dt, player);
   }
 
+  /** Lateral repulsion (dustbin smell clouds): crowd swerves away. */
+  repelFrom(s: number, t: number, radius: number, strength: number): void {
+    for (let i = 0; i < MAX_AGENTS; i++) {
+      if (this.state[i] === AgentState.Inactive) continue;
+      const ds = this.s[i]! - s;
+      if (ds > radius || ds < -radius) continue;
+      const dtt = this.t[i]! - t;
+      const d2 = ds * ds + dtt * dtt;
+      if (d2 < radius * radius && d2 > 1e-6) {
+        this.t[i]! += (dtt >= 0 ? 1 : -1) * strength * (1 - Math.sqrt(d2) / radius);
+      }
+    }
+  }
+
   /** Dog bark ripple: panic agents within radius of (s, t). */
   panicNear(s: number, t: number, radius: number): void {
     const r2 = radius * radius;
