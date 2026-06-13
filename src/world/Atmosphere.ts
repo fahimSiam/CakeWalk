@@ -66,7 +66,9 @@ export function dressScene(
   const sky = new Color(pal.sky);
   if (mods.weather === 'rain') sky.lerp(new Color('#7d848c'), 0.45);
   scene.background = sky;
-  scene.fog = new Fog(sky, mods.weather === 'rain' ? pal.fogNear * 0.7 : pal.fogNear, 130);
+  // Push the far plane out so the colorful building rows stay visible deep into
+  // the scene instead of washing to sky color a few blocks ahead.
+  scene.fog = new Fog(sky, mods.weather === 'rain' ? pal.fogNear * 0.7 : pal.fogNear, 200);
 
   if (mods.weather !== 'rain') return { frame: () => {}, dispose: () => {} };
 

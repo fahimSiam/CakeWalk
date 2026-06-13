@@ -19,7 +19,7 @@ export interface RoutePoint {
 // Stalls/benches sit just OFF the walkable strip (|t| can be up to ~7 m),
 // so proximity is judged mostly along s — the player walks "up to" the
 // stall, not into it.
-const REST_RANGE_S = 3.5;
+const REST_RANGE_S = 5.5;
 const REST_RANGE_T = 7.5;
 const FRUIT_RANGE_S = 1.4;
 const FRUIT_RANGE_T = 2.2;

@@ -164,28 +164,37 @@ export function buildRickshawGeometry(): BufferGeometry {
   );
 }
 
-/** CNG auto-rickshaw: the green three-wheeler cage. */
+/** CNG auto-rickshaw: the bright green three-wheeler cage with yellow roof. */
 export function buildCngGeometry(): BufferGeometry {
   const body = new BoxGeometry(1.25, 1.1, 2.3);
   body.translate(0, 0.85, 0);
+  const skirt = new BoxGeometry(1.32, 0.4, 2.34);
+  skirt.translate(0, 0.5, 0);
   const windshield = new BoxGeometry(1.1, 0.5, 0.06);
   windshield.translate(0, 1.15, 1.16);
-  const roof = new BoxGeometry(1.3, 0.08, 2.0);
-  roof.translate(0, 1.46, -0.1);
-  const wheelF = new BoxGeometry(0.14, 0.5, 0.5);
+  const roof = new BoxGeometry(1.32, 0.12, 2.0);
+  roof.translate(0, 1.47, -0.1);
+  const headL = new BoxGeometry(0.18, 0.18, 0.1);
+  headL.translate(-0.4, 0.7, 1.18);
+  const headR = new BoxGeometry(0.18, 0.18, 0.1);
+  headR.translate(0.4, 0.7, 1.18);
+  const wheelF = new BoxGeometry(0.16, 0.5, 0.5);
   wheelF.translate(0, 0.25, 1.0);
-  const wheelL = new BoxGeometry(0.14, 0.55, 0.55);
+  const wheelL = new BoxGeometry(0.16, 0.55, 0.55);
   wheelL.translate(-0.62, 0.28, -0.7);
-  const wheelR = new BoxGeometry(0.14, 0.55, 0.55);
+  const wheelR = new BoxGeometry(0.16, 0.55, 0.55);
   wheelR.translate(0.62, 0.28, -0.7);
   return mergeGeometries(
     [
-      paintColored(body, new Color('#2e7d4f')),
-      paintColored(windshield, new Color('#a8c8e0')),
-      paintColored(roof, new Color('#256640')),
-      paintColored(wheelF, new Color('#222')),
-      paintColored(wheelL, new Color('#222')),
-      paintColored(wheelR, new Color('#222')),
+      paintColored(body, new Color('#2ec24c')),
+      paintColored(skirt, new Color('#1f8f38')),
+      paintColored(windshield, new Color('#bfe3f5')),
+      paintColored(roof, new Color('#ffd23e')),
+      paintColored(headL, new Color('#fff3b0')),
+      paintColored(headR, new Color('#fff3b0')),
+      paintColored(wheelF, new Color('#1b1b1b')),
+      paintColored(wheelL, new Color('#1b1b1b')),
+      paintColored(wheelR, new Color('#1b1b1b')),
     ],
     false,
   );

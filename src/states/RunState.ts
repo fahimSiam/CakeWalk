@@ -402,6 +402,10 @@ export class RunState implements GameState {
     return zones.filter((z, i) => i === 0 || z.s - zones[i - 1]!.s > 25);
   }
 
+  /** The right-side lateral band (t) where a seated rest spot is reachable. */
+  private static readonly REST_T_MIN = 2.2;
+  private static readonly REST_T_MAX = 6.0;
+
   /** Cha dokans, bus stops & fruit trees near the walking line. */
   private buildRoutePoints(): RoutePoint[] {
     const points: RoutePoint[] = [];
@@ -416,13 +420,23 @@ export class RunState implements GameState {
         corridor.toWorld(s, 0, pose);
         const dx = poi.pos[0] - pose.x;
         const dz = poi.pos[1] - pose.z;
-        if (dx * dx + dz * dz > 12 * 12) continue;
-        // Lateral offset = projection on the path normal. The LEFT (t<0) is
-        // the traffic road now — only right-side spots are reachable.
+        // Lateral offset = projection on the path normal. The LEFT (t<0) is the
+        // traffic road; rest spots live on the right (t>0).
         const t = dx * -pose.dirZ + dz * pose.dirX;
-        if (t < -2) continue;
-        points.push({ kind: poi.kind, s, t, fruit: poi.kind === 'tree' });
+        if (poi.kind === 'tree') {
+          // Trees keep their real position (the fruit-grab must line up with the
+          // rendered tree); only the reachable, right-side ones count.
+          if (dx * dx + dz * dz > 12 * 12 || t < -2) continue;
+          points.push({ kind: 'tree', s, t, fruit: true });
+        } else {
+          // Rest stalls are snapped into the reachable right-side band, and the
+          // stall is rendered there too, so what you see is what you can sit at.
+          if (dx * dx + dz * dz > 22 * 22) continue;
+          const ct = Math.max(RunState.REST_T_MIN, Math.min(RunState.REST_T_MAX, Math.abs(t)));
+          points.push({ kind: poi.kind, s, t: ct, fruit: false });
+        }
       }
+      this.fillRestGaps(points);
     } else if (!area) {
       // Graybox: regular practice props.
       const rng = this.rng.stream('graybox-props');
@@ -432,6 +446,44 @@ export class RunState implements GameState {
       }
     }
     return points.sort((a, b) => a.s - b.s);
+  }
+
+  /**
+   * Guarantees the player always meets seatable rest spots: where the gap
+   * between consecutive cha dokans / bus stops exceeds ~170 m, drop a
+   * synthesized cha dokan in the middle (deterministic, on the right side).
+   */
+  private fillRestGaps(points: RoutePoint[]): void {
+    const MAX_GAP = 170;
+    const rests = points.filter((p) => p.kind !== 'tree').sort((a, b) => a.s - b.s);
+    const marks: number[] = [20, ...rests.map((r) => r.s), this.runLength - 20];
+    const rng = this.rng.stream('rest-fill');
+    for (let i = 1; i < marks.length; i++) {
+      let gap = marks[i]! - marks[i - 1]!;
+      let at = marks[i - 1]!;
+      while (gap > MAX_GAP) {
+        at += MAX_GAP * (0.6 + rng.range(0, 0.3));
+        if (at > this.runLength - 25) break;
+        points.push({ kind: 'chaDokan', s: at, t: RunState.REST_T_MIN + rng.range(0, 1.4), fruit: false });
+        gap = marks[i]! - at;
+      }
+    }
+  }
+
+  /** World positions + facings for the seatable stalls (fed to LevelRenderer). */
+  private buildRestStalls(): import('@/world/LevelRenderer').RestStall[] {
+    if (!(this.corridor instanceof SplineCorridor)) return [];
+    const pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+    const stalls: import('@/world/LevelRenderer').RestStall[] = [];
+    for (const p of this.interactions.points) {
+      if (p.kind === 'tree') continue;
+      this.corridor.toWorld(p.s, p.t, pose);
+      // Bench faces the street (toward -t, the left/road side): local +Z maps
+      // to the left normal (dirZ, -dirX).
+      const angle = Math.atan2(pose.dirZ, -pose.dirX);
+      stalls.push({ kind: p.kind, x: pose.x, z: pose.z, angle });
+    }
+    return stalls;
   }
 
   exit(): void {
@@ -665,16 +717,17 @@ export class RunState implements GameState {
     }
     this.avatar.update(this.player, s, t, this.corridor, sitTarget, frameDt);
 
-    // Chase cam: behind and above along the path direction, looking ahead.
-    // Critically damped toward the target so corners swing smoothly instead
-    // of snapping with the path direction.
+    // Chase cam: locked behind the player along the path tangent and high
+    // enough to clear roadside buildings, looking slightly down at the player
+    // so the whole world banks with the road (Temple-Run feel) and the
+    // character is never hidden behind a building on a curve.
     const cam = this.ctx.camera;
-    const back = 5.2;
-    let targetX = this.pose.x - this.pose.dirX * back - t * 0.4;
-    let targetY = 3.0 + this.player.y * 0.3;
+    const back = 6.0;
+    let targetX = this.pose.x - this.pose.dirX * back - t * 0.2;
+    let targetY = 5.0 + this.player.y * 0.3;
     let targetZ = this.pose.z - this.pose.dirZ * back;
-    let lookX = this.pose.x + this.pose.dirX * 6;
-    let lookZ = this.pose.z + this.pose.dirZ * 6;
+    let lookX = this.pose.x + this.pose.dirX * 3.0;
+    let lookZ = this.pose.z + this.pose.dirZ * 3.0;
     if (sitTarget) {
       // Cinematic rest framing: swing out front so the seated character
       // (and any approaching pocketmar) is in view.
@@ -832,7 +885,12 @@ export class RunState implements GameState {
 
     if (this.params.area && this.params.route) {
       // Real Dhaka: build the world from baked OSM data along the route.
-      this.level = new LevelRenderer(this.scene, this.params.area, this.params.route.pts);
+      this.level = new LevelRenderer(
+        this.scene,
+        this.params.area,
+        this.params.route.pts,
+        this.buildRestStalls(),
+      );
       const end: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
       this.corridor.toWorld(this.runLength, 0, end);
       const gate = this.own(

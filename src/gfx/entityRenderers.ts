@@ -201,21 +201,37 @@ export class StreetLifeRenderer {
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
 
   constructor(scene: Scene, private life: StreetLife, private corridor: Corridor) {
-    // Low-poly Qurbani cow: body + head + horns + legs.
+    // Low-poly Qurbani cow: pale body + brown head, horns, ears, festive
+    // garland collar (cattle are decorated for Eid-ul-Adha) and a tail.
     const cowBody = new BoxGeometry(1.0, 0.85, 1.9);
     cowBody.translate(0, 1.05, 0);
+    const cowHump = new BoxGeometry(0.55, 0.3, 0.5);
+    cowHump.translate(0, 1.55, -0.45);
     const cowHead = new BoxGeometry(0.5, 0.5, 0.55);
     cowHead.translate(0, 1.35, 1.15);
     const cowHorns = new BoxGeometry(0.75, 0.08, 0.1);
     cowHorns.translate(0, 1.62, 1.2);
+    const cowEarL = new BoxGeometry(0.18, 0.1, 0.12);
+    cowEarL.translate(-0.32, 1.45, 1.1);
+    const cowEarR = new BoxGeometry(0.18, 0.1, 0.12);
+    cowEarR.translate(0.32, 1.45, 1.1);
+    const cowGarland = new BoxGeometry(0.62, 0.14, 0.62);
+    cowGarland.translate(0, 1.15, 0.9);
     const cowLegs = new BoxGeometry(0.85, 0.65, 1.6);
     cowLegs.translate(0, 0.32, 0);
+    const cowTail = new BoxGeometry(0.1, 0.6, 0.1);
+    cowTail.translate(0, 0.95, -0.95);
     const cowGeo = mergeGeometries(
       [
-        paintColored(cowBody, new Color('#c7b9a5')),
-        paintColored(cowHead, new Color('#b5a48c')),
-        paintColored(cowHorns, new Color('#e8ddc8')),
+        paintColored(cowBody, new Color('#efe3cf')),
+        paintColored(cowHump, new Color('#e2d3ba')),
+        paintColored(cowHead, new Color('#c89a6a')),
+        paintColored(cowHorns, new Color('#f4ead2')),
+        paintColored(cowEarL, new Color('#b98a5c')),
+        paintColored(cowEarR, new Color('#b98a5c')),
+        paintColored(cowGarland, new Color('#ff7aa8')),
         paintColored(cowLegs, new Color('#8a7b66')),
+        paintColored(cowTail, new Color('#8a7b66')),
       ],
       false,
     );

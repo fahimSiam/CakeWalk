@@ -144,6 +144,37 @@ test('crossing minigame opens at a major road and resolves', async ({ page }) =>
   expect(crossed).toBe(true);
 });
 
+test('walking up to a cha dokan pops the San-Andreas sit prompt', async ({ page }) => {
+  await page.goto('/?debug=1&seed=11&area=dhanmondi');
+  await page.waitForFunction(() => Boolean(window.__cakewalk?.ctx?.testApi?.routeSelect));
+  await page.evaluate(() => {
+    (window.__cakewalk.ctx.testApi.routeSelect as { start(i: number): void }).start(0);
+  });
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+  // Freeze the loop and step forward until a rest spot is in range.
+  const found = await page.evaluate(() => {
+    window.__cakewalk.loop.timeScale = 0;
+    const run = window.__cakewalk.ctx.testApi.run as {
+      player: { health: number; stamina: number };
+      interactions: { nearRest: unknown };
+    };
+    for (let i = 0; i < 30 * 400; i++) {
+      window.__cakewalk.inject({ speed: 0.6 });
+      window.__cakewalk.step(1);
+      run.player.health = 100;
+      run.player.stamina = 100;
+      if (run.interactions.nearRest) return true;
+    }
+    return false;
+  });
+  expect(found).toBe(true);
+  // render() keeps drawing while frozen → the prompt shows the bind key.
+  await page.waitForTimeout(150);
+  const prompt = page.locator('.cw-prompt');
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText('sit');
+});
+
 test('player advances and earns taka with injected sprint input', async ({ page }) => {
   await page.goto('/?seed=7&graybox=1');
   await page.waitForFunction(() => window.__cakewalk?.ready === true);

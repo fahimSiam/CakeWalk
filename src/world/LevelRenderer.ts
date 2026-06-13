@@ -64,22 +64,32 @@ export interface PlacedProp {
   name?: string;
 }
 
+/** A seatable rest spot placed exactly where the player can reach it. */
+export interface RestStall {
+  kind: 'chaDokan' | 'busStop';
+  x: number;
+  z: number;
+  /** Y rotation so the bench faces the street. */
+  angle: number;
+}
+
 export class LevelRenderer {
   readonly group = new Group();
   readonly props: PlacedProp[] = [];
   readonly routeRef: Vec2[];
 
-  constructor(scene: Scene, area: BakedArea, routePts: Vec2[]) {
+  constructor(scene: Scene, area: BakedArea, routePts: Vec2[], restStalls: RestStall[] = []) {
     this.routeRef = routePts;
     const near = makeRouteDistance(routePts);
 
     this.addGround(routePts);
     this.addRoads(area, near);
     this.addRouteRibbon(routePts);
-    this.addPolys(area.water, '#5b8aa6', 0.02);
-    this.addPolys(area.parks, '#7d9e6a', 0.01);
+    this.addPolys(area.water, '#5fb0d8', 0.02);
+    this.addPolys(area.parks, '#8fd06a', 0.01);
     this.addBuildings(area, near);
     this.addProps(area, near);
+    this.addRestStalls(restStalls);
     this.addSignboards(area, routePts);
     scene.add(this.group);
   }
@@ -107,7 +117,7 @@ export class LevelRenderer {
     cz /= routePts.length;
     const ground = new Mesh(
       new PlaneGeometry(3000, 3000),
-      new MeshLambertMaterial({ color: '#a39377' }),
+      new MeshLambertMaterial({ color: '#cdbc9c' }),
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(cx, -0.05, cz);
@@ -134,9 +144,11 @@ export class LevelRenderer {
   }
 
   private addRouteRibbon(routePts: Vec2[]): void {
-    // Footpath the player walks (warm, cartoon-clean).
-    const g = ribbon(routePts, 7.6, 0.03, new Color('#b8a98e'));
-    if (g) this.group.add(new Mesh(g, new MeshLambertMaterial({ vertexColors: true })));
+    // Footpath the player walks: dark grout base + vibrant candy tile rows on
+    // top (Fall-Guys / Crossy-Roads vibe), so the floor itself reads colorful.
+    const grout = ribbon(routePts, 7.8, 0.022, new Color('#5b4c3a'));
+    if (grout) this.group.add(new Mesh(grout, new MeshLambertMaterial({ vertexColors: true })));
+    this.addTiledFootpath(routePts);
 
     // The traffic road runs on the LEFT of the footpath: dark ribbon with
     // dashed lane lines — the oncoming vehicle stream lives here.
@@ -164,6 +176,91 @@ export class LevelRenderer {
       });
       this.group.add(mesh);
     }
+  }
+
+  /**
+   * Lays a grid of vibrant inset tiles along the footpath — 4 colored columns
+   * across the width, the palette stepping per row+column so it reads as a
+   * checkered candy walkway with dark grout showing between tiles.
+   */
+  private addTiledFootpath(routePts: Vec2[]): void {
+    const PALETTE = ['#f6c75b', '#5fd6c0', '#f58fb4', '#9fb8ff', '#b6e07a', '#ffa473'].map(
+      (c) => new Color(c),
+    );
+    const WIDTH = 7.0;
+    const COLS = 4;
+    const STEP = 1.55;
+    const INSET = 0.07; // shrink each tile to expose grout
+    const half = WIDTH / 2;
+    const samples: { p: Vec2; n: Vec2 }[] = [];
+    walkAlong(routePts, STEP, 0, (pos, normal) => samples.push({ p: pos, n: normal }));
+    if (samples.length < 2) return;
+
+    const verts: number[] = [];
+    const colors: number[] = [];
+    const idx: number[] = [];
+    let vi = 0;
+    const pt = (s: { p: Vec2; n: Vec2 }, t: number): [number, number] => [
+      s.p[0] + s.n[0] * t,
+      s.p[1] + s.n[1] * t,
+    ];
+    for (let r = 0; r < samples.length - 1; r++) {
+      const a = samples[r]!;
+      const b = samples[r + 1]!;
+      for (let c = 0; c < COLS; c++) {
+        const t0 = -half + (c / COLS) * WIDTH + INSET;
+        const t1 = -half + ((c + 1) / COLS) * WIDTH - INSET;
+        // Inset along the path too by sampling slightly inward (via lerp).
+        const a0 = pt(a, t0);
+        const a1 = pt(a, t1);
+        const b0 = pt(b, t0);
+        const b1 = pt(b, t1);
+        const col = PALETTE[(r + c) % PALETTE.length]!;
+        const base = vi;
+        for (const [x, z] of [a0, a1, b1, b0]) {
+          verts.push(x, 0.035, z);
+          colors.push(col.r, col.g, col.b);
+          vi++;
+        }
+        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new BufferAttribute(new Float32Array(verts), 3));
+    geo.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    this.group.add(
+      new Mesh(geo, new MeshLambertMaterial({ vertexColors: true, side: DoubleSide })),
+    );
+  }
+
+  /**
+   * Cha dokans & bus stops rendered exactly where the player can reach them
+   * (RunState computes these from the seatable interaction points), so every
+   * stall you see is one you can actually sit at.
+   */
+  private addRestStalls(stalls: RestStall[]): void {
+    const cha = stalls.filter((s) => s.kind === 'chaDokan');
+    const bus = stalls.filter((s) => s.kind === 'busStop');
+    const place = (items: RestStall[], geo: BufferGeometry): void => {
+      if (!items.length) return;
+      const mesh = new InstancedMesh(
+        geo,
+        new MeshLambertMaterial({ vertexColors: true, flatShading: true }),
+        items.length,
+      );
+      const m = new Matrix4();
+      const q = new Quaternion();
+      items.forEach((it, i) => {
+        q.setFromAxisAngle(new Vector3(0, 1, 0), it.angle);
+        m.compose(new Vector3(it.x, 0, it.z), q, new Vector3(1, 1, 1));
+        mesh.setMatrixAt(i, m);
+      });
+      this.group.add(mesh);
+    };
+    place(cha, chaDokanGeometry());
+    place(bus, busStopGeometry());
   }
 
   private addPolys(polys: Vec2[][], color: string, y: number): void {
@@ -286,10 +383,9 @@ export class LevelRenderer {
       this.group.add(mesh);
     };
 
+    // Cha dokans & bus stops are rendered by addRestStalls at reachable spots.
     instanced(byKind.get('tree') ?? [], treeGeometry());
     instanced(byKind.get('dustbin') ?? [], dustbinGeometry());
-    instanced(byKind.get('chaDokan') ?? [], chaDokanGeometry());
-    instanced(byKind.get('busStop') ?? [], busStopGeometry());
     this.addStreetClutter(this.routeRef);
   }
 
