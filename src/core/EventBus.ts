@@ -12,7 +12,7 @@ export interface GameEvents {
   nearMiss: { distance: number; combo: number };
   comboBroken: { combo: number; reason: 'bump' | 'stumble' | 'misread' };
   takaChanged: { delta: number; total: number; reason: string };
-  theft: { amount: number; source: 'walk' | 'phone' | 'seated' };
+  theft: { amount: number; source: 'walk' | 'phone' | 'seated' | 'cat' };
   theftSpotted: { bonus: number };
   seatedTellStarted: Record<string, never>;
   stareMisread: Record<string, never>;

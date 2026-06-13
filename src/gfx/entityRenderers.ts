@@ -112,8 +112,9 @@ export class TrafficRenderer {
   /** One InstancedMesh per vehicle kind: bus/bike are real Kenney models
    *  (swapped in when loaded), CNG/rickshaw are detailed procedural builds. */
   private kindMeshes: InstancedMesh[] = [];
-  /** Uniform render scale per kind (GLB models are unit-length along Z). */
-  private kindScale: (number | null)[] = []; // null = box-style xyz scale
+  /** Per-kind render scale (x,y,z). Procedural builds use a uniform scale; GLB
+   *  models are scaled to the kind's real width/height/length (no fat trucks). */
+  private kindScale: (Vector3 | null)[] = []; // null = box-style xyz scale
   private dummy = new Object3D();
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
   private disposed = false;
@@ -128,13 +129,13 @@ export class TrafficRenderer {
       new MeshLambertMaterial({ flatShading: true, vertexColors: true });
     VEHICLE_KINDS.forEach((kind, ki) => {
       let geo: ReturnType<typeof buildCngGeometry>;
-      let scale: number | null = null;
+      let scale: Vector3 | null = null;
       if (kind.id === 'cng') {
         geo = buildCngGeometry();
-        scale = kind.length / 2.3;
+        scale = new Vector3(1, 1, 1).multiplyScalar(kind.length / 2.3);
       } else if (kind.id === 'rickshaw') {
         geo = buildRickshawGeometry();
-        scale = kind.length / 2.35;
+        scale = new Vector3(1, 1, 1).multiplyScalar(kind.length / 2.35);
       } else {
         // Placeholder box until the Kenney model arrives.
         const box = new BoxGeometry(1, 1, 1);
@@ -159,7 +160,12 @@ export class TrafficRenderer {
           mesh.geometry = model.geometry;
           mesh.material = model.material as MeshLambertMaterial;
           if (this.bend) applyWorldBend(mesh.material, this.bend);
-          this.kindScale[ki] = kind.length; // unit-length model → scale by length
+          // Non-uniform: real width/height/length so the truck isn't a cube.
+          this.kindScale[ki] = new Vector3(
+            kind.width / model.sx,
+            kind.height / model.sy,
+            kind.length,
+          );
         });
       }
     });
@@ -179,7 +185,7 @@ export class TrafficRenderer {
       // Stream traffic drives along the road, opposite the player (-s).
       this.dummy.rotation.set(0, Math.atan2(-this.pose.dirX, -this.pose.dirZ), 0);
       const scale = this.kindScale[ki];
-      if (scale != null) this.dummy.scale.setScalar(scale);
+      if (scale != null) this.dummy.scale.copy(scale);
       else this.dummy.scale.set(kind.width, kind.height, kind.length);
       this.dummy.updateMatrix();
       mesh.setMatrixAt(counts[ki]!++, this.dummy.matrix);

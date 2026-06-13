@@ -150,6 +150,51 @@ export function makeSignboard(name: string, seed: number, big = false): Mesh {
   );
 }
 
+/**
+ * A building's name painted FLAT on the footpath in front of it (Rev 8 — easier
+ * to read while walking than a vertical board). Returns a ground-lying plane.
+ */
+export function makeFloorLabel(name: string, seed: number): Mesh {
+  const pal = SIGN_PALETTES[seed % SIGN_PALETTES.length]!;
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const g = canvas.getContext('2d')!;
+  // Rounded plaque so it reads as painted-on signage, not a floating label.
+  g.fillStyle = pal.bg;
+  roundRect(g, 6, 18, 500, 92, 18);
+  g.fill();
+  g.strokeStyle = pal.fg;
+  g.lineWidth = 5;
+  roundRect(g, 6, 18, 500, 92, 18);
+  g.stroke();
+  g.fillStyle = pal.fg;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const label = name.length > 26 ? name.slice(0, 25) + '…' : name;
+  g.font = `bold ${label.length > 18 ? 36 : 46}px system-ui, 'Noto Sans Bengali', sans-serif`;
+  g.fillText(label, 256, 66);
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  const mesh = new Mesh(
+    new PlaneGeometry(5.0, 1.25),
+    new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  mesh.rotation.x = -Math.PI / 2; // lie flat, text facing up
+  mesh.renderOrder = 2; // sit above the footpath tiles
+  return mesh;
+}
+
+function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
 /** Lambert material for textured facade walls (vertex tint × texture). */
 export function facadeMaterial(style: FacadeStyle): MeshLambertMaterial {
   return new MeshLambertMaterial({

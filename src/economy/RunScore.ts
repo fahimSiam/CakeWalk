@@ -64,7 +64,7 @@ export class RunScore {
   }
 
   /** Pickpocket theft. Returns the amount actually stolen. */
-  steal(amount: number, source: 'walk' | 'phone' | 'seated'): number {
+  steal(amount: number, source: 'walk' | 'phone' | 'seated' | 'cat'): number {
     const stolen = Math.min(this.taka, Math.floor(amount));
     if (stolen <= 0) return 0;
     this.taka -= stolen;

@@ -151,13 +151,18 @@ test('walking up to a cha dokan pops the San-Andreas sit prompt', async ({ page 
     (window.__cakewalk.ctx.testApi.routeSelect as { start(i: number): void }).start(0);
   });
   await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
-  // Freeze the loop and step forward until a rest spot is in range.
+  // Freeze the loop and step forward until a rest spot is in range. Clear the
+  // crossing zones first so the Crossy-Roads minigame (now frequent) doesn't
+  // freeze the sim before we reach a stall — this test is about the prompt.
   const found = await page.evaluate(() => {
     window.__cakewalk.loop.timeScale = 0;
     const run = window.__cakewalk.ctx.testApi.run as {
       player: { health: number; stamina: number };
       interactions: { nearRest: unknown };
+      traffic: { zones: unknown[]; pendingZone: unknown };
     };
+    run.traffic.zones = [];
+    run.traffic.pendingZone = null;
     for (let i = 0; i < 30 * 400; i++) {
       window.__cakewalk.inject({ speed: 0.6 });
       window.__cakewalk.step(1);

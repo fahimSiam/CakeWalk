@@ -204,7 +204,7 @@ describe('TrafficSystem', () => {
 
 describe('StreetLife', () => {
   it('sprinting past a sleeping dog triggers a bark panic ripple', () => {
-    const { bus, rng, player } = setup();
+    const { bus, rng, player, score } = setup();
     const corridor = new StraightCorridor(600, 3);
     const crowd = new CrowdSystem(corridor, rng.stream('c'), bus);
     crowd.config.density = 30;
@@ -217,14 +217,32 @@ describe('StreetLife', () => {
     player.speed = 5; // sprinting
     let barked = false;
     bus.on('dogBark', () => (barked = true));
-    life.fixedUpdate(DT, player, crowd);
+    life.fixedUpdate(DT, player, crowd, score);
     bus.flush();
     expect(barked).toBe(true);
     expect(dog.barked).toBe(true);
   });
 
-  it('cats break combo on contact', () => {
-    const { bus, rng, player } = setup();
+  it('a thieving cat snatches taka on contact', () => {
+    const { bus, rng, player, score } = setup();
+    score.add(80, 'test');
+    const corridor = new StraightCorridor(600, 3);
+    const crowd = new CrowdSystem(corridor, rng.stream('c'), bus);
+    const life = new StreetLife(rng.stream('l'), bus);
+    life.catActive[0] = 1;
+    life.catS[0] = player.s;
+    life.catT[0] = player.t;
+    life.catDir[0] = 1;
+    let stolen = 0;
+    bus.on('theft', (e) => (stolen = e.amount));
+    life.fixedUpdate(DT, player, crowd, score);
+    bus.flush();
+    expect(stolen).toBeGreaterThan(0);
+    expect(score.taka).toBe(80 - stolen);
+  });
+
+  it('a cat with an empty wallet just breaks the combo', () => {
+    const { bus, rng, player, score } = setup();
     const corridor = new StraightCorridor(600, 3);
     const crowd = new CrowdSystem(corridor, rng.stream('c'), bus);
     const life = new StreetLife(rng.stream('l'), bus);
@@ -234,7 +252,7 @@ describe('StreetLife', () => {
     life.catDir[0] = 1;
     let stumble = false;
     bus.on('catStumble', () => (stumble = true));
-    life.fixedUpdate(DT, player, crowd);
+    life.fixedUpdate(DT, player, crowd, score);
     bus.flush();
     expect(stumble).toBe(true);
   });
@@ -321,7 +339,7 @@ describe('Cows (Eid theming)', () => {
     bus.flush();
     expect(started).toBe(true);
     for (let i = 0; i < 30 * 20 && bonus === 0; i++) {
-      life.fixedUpdate(DT, player, crowd);
+      life.fixedUpdate(DT, player, crowd, score);
       bus.flush();
     }
     expect(bonus).toBeGreaterThan(0);
@@ -329,7 +347,7 @@ describe('Cows (Eid theming)', () => {
   });
 
   it('a stampeding cow hit hurts and voids the bonus', () => {
-    const { bus, rng, player } = setup();
+    const { bus, rng, player, score } = setup();
     const corridor = new StraightCorridor(600, 3);
     const crowd = new CrowdSystem(corridor, rng.stream('c'), bus);
     const life = new StreetLife(rng.stream('l'), bus);
@@ -340,7 +358,7 @@ describe('Cows (Eid theming)', () => {
     life.startStampede(player, crowd);
     // Park the player in the cows' path.
     for (let i = 0; i < 30 * 20; i++) {
-      life.fixedUpdate(DT, player, crowd);
+      life.fixedUpdate(DT, player, crowd, score);
       player.bumpCooldown = 0; // allow repeated checks
       bus.flush();
     }

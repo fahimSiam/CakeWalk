@@ -8,6 +8,7 @@ import type { EventBus } from '@/core/EventBus';
 import type { RngStream } from '@/core/Rng';
 import type { Player } from '@/player/Player';
 import type { CrowdSystem } from '@/crowd/CrowdSystem';
+import type { RunScore } from '@/economy/RunScore';
 import { SPEED_WALK } from '@/player/Player';
 
 export interface DogSpot {
@@ -24,8 +25,12 @@ export interface DustbinSpot {
 
 const MAX_CATS = 3;
 const DOG_SPACING = 130;
-const CAT_INTERVAL_MIN = 11;
-const CAT_INTERVAL_MAX = 24;
+// Cats are rarer now but mug you: a thieving cat darts in, and on contact
+// snatches some taka (idea.md Rev 8). Less frequent so it stays a surprise.
+const CAT_INTERVAL_MIN = 20;
+const CAT_INTERVAL_MAX = 42;
+const CAT_STEAL_MIN = 7;
+const CAT_STEAL_MAX = 16;
 
 export const MAX_COWS = 6;
 export const enum CowState {
@@ -71,7 +76,7 @@ export class StreetLife {
     this.dustbins = dustbins.map((d) => ({ s: d.s, t: d.t, smelly: this.rng.chance(0.5) }));
   }
 
-  fixedUpdate(dt: number, player: Player, crowd: CrowdSystem): void {
+  fixedUpdate(dt: number, player: Player, crowd: CrowdSystem, score: RunScore): void {
     const airborne = player.y > 1.2; // on the overbridge — street can't touch you
     // Dogs: low obstacle (jump clears); sprinting close startles → bark panic.
     for (const dog of this.dogs) {
@@ -114,9 +119,14 @@ export class StreetLife {
         this.catActive[i] = 0;
         continue;
       }
-      if (Math.abs(player.s - this.catS[i]!) < 0.5 && Math.abs(player.t - this.catT[i]!) < 0.45 && !player.jumping && !airborne) {
+      if (Math.abs(player.s - this.catS[i]!) < 0.6 && Math.abs(player.t - this.catT[i]!) < 0.5 && !airborne) {
+        // A thieving cat: snatches taka and bolts (you can't jump over a mugging).
+        // steal() emits the 'theft' event (toast + tally); fall back to a plain
+        // stumble when the wallet is already empty.
         this.catActive[i] = 0;
-        this.bus.emit('catStumble', {});
+        if (score.steal(this.rng.range(CAT_STEAL_MIN, CAT_STEAL_MAX), 'cat') <= 0) {
+          this.bus.emit('catStumble', {});
+        }
       }
     }
   }

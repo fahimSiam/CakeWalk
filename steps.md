@@ -166,3 +166,11 @@
 - [x] **A bit faster paced**: walk 2.4→3.0, jog 5.0→6.2, shuffle 1.1→1.4, lateral 3.2→3.7 m/s
 - [x] 76 unit (+road-collision test, +updated walk-speed bound) + 8 e2e green; screenshots verified across seeds (clean right-buildings/left-road/colorful-path framing; on-road bus risk; worst-case curve no longer engulfs)
 - **2026-06-13**: M17 — bean characters, curved-world bend, 2D type-colored right-side facades (OSM, not Google), walkable fast-car road, two-sided rest stalls, faster pacing.
+
+## M18a — Cats steal, vehicle proportions, more crossings, floor names ✅
+- [x] **Thieving cats**: cats are rarer now (interval 20-42 s) but on contact snatch 7-16 taka (score.steal source 'cat' → theft toast); empty-wallet contact just breaks combo. They still dart in from the side
+- [x] **Vehicle proportions fixed**: GLB hero models (bus/bike) were uniformly scaled by length → fat trucks. models.ts now returns normalized width/height (sx/sy); TrafficRenderer scales non-uniformly to each kind's real width/height/length
+- [x] **Way more crossings**: every route intersection (not just majorCrossing) is a crossing, plus gap-fillers so one appears ~every 140 m (merge threshold 25→22 m)
+- [x] **Building names on the floor**: real OSM names painted FLAT on the footpath in front of each building (makeFloorLabel rounded plaque, lies flat, reads along the walking direction) instead of vertical boards — easier to read while walking
+- [x] 77 unit (+thieving-cat tests) + 8 e2e green (sit-prompt test clears zones so frequent crossings don't freeze its step loop)
+- **2026-06-13**: M18a checkpoint before the always-straight-corridor + turn-minigame rework.

@@ -17,6 +17,10 @@ export interface LoadedModel {
   material: Material;
   /** Model length along +Z after normalization (= 1). Scale by desired length. */
   unit: true;
+  /** Normalized width (x) and height (y) relative to length, so the renderer
+   *  can scale non-uniformly to a kind's real width/height (no fat trucks). */
+  sx: number;
+  sy: number;
 }
 
 const cache = new Map<string, Promise<LoadedModel | null>>();
@@ -59,7 +63,13 @@ export function loadVehicleModel(name: string): Promise<LoadedModel | null> {
         const center = box.getCenter(new Vector3());
         merged.translate(-center.x, -box.min.y, -center.z);
         merged.scale(1 / size.z, 1 / size.z, 1 / size.z);
-        return { geometry: merged, material, unit: true as const };
+        return {
+          geometry: merged,
+          material,
+          unit: true as const,
+          sx: size.x / size.z,
+          sy: size.y / size.z,
+        };
       })
       .catch(() => null); // missing model → caller keeps its procedural fallback
     cache.set(name, p);

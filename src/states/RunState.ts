@@ -385,27 +385,42 @@ export class RunState implements GameState {
     };
   }
 
-  /** Crossing zones from route nodes flagged majorCrossing. */
+  /** Crossing zones: every route intersection plus gap-fillers so the player
+   *  meets way more crossings (idea.md Rev 8). */
   private buildCrossingZones(): CrossingZone[] {
     const zones: CrossingZone[] = [];
     const { area, route } = this.params;
     if (area && route && this.corridor instanceof SplineCorridor) {
       for (const ni of route.nodePath.slice(1, -1)) {
         const node = area.graph.nodes[ni]!;
-        if (!node.majorCrossing) continue;
         const s = this.corridor.closestS(node.pos[0], node.pos[1]);
         if (s < 25 || s > this.runLength - 15) continue;
-        // Difficulty from the route's overall traffic level.
-        zones.push({ s, difficulty: route.traffic, halfWidth: 4.5, crossed: false });
+        // Major intersections are harder; minor ones are quick dashes.
+        const difficulty = node.majorCrossing ? route.traffic : Math.max(2, route.traffic - 1);
+        zones.push({ s, difficulty, halfWidth: 4.5, crossed: false });
       }
     } else {
-      // Graybox: two practice crossings.
-      zones.push({ s: 180, difficulty: 2, halfWidth: 4.5, crossed: false });
-      zones.push({ s: 360, difficulty: 4, halfWidth: 4.5, crossed: false });
+      zones.push({ s: 120, difficulty: 2, halfWidth: 4.5, crossed: false });
+      zones.push({ s: 280, difficulty: 3, halfWidth: 4.5, crossed: false });
+      zones.push({ s: 420, difficulty: 4, halfWidth: 4.5, crossed: false });
     }
-    // Merge zones closer than 25 m so waves don't stack unfairly.
+    // Fill long gaps so a crossing shows up roughly every ~140 m.
+    const GAP = 140;
+    const rng = this.rng.stream('crossing-fill');
     zones.sort((a, b) => a.s - b.s);
-    return zones.filter((z, i) => i === 0 || z.s - zones[i - 1]!.s > 25);
+    const marks = [10, ...zones.map((z) => z.s), this.runLength - 12];
+    for (let i = 1; i < marks.length; i++) {
+      let at = marks[i - 1]!;
+      while (marks[i]! - at > GAP) {
+        at += GAP * (0.7 + rng.range(0, 0.25));
+        if (at > this.runLength - 20) break;
+        const difficulty = Math.max(2, Math.min(5, Math.round((route?.traffic ?? 3) + rng.range(-1, 1))));
+        zones.push({ s: at, difficulty, halfWidth: 4.5, crossed: false });
+      }
+    }
+    // Merge zones closer than 22 m so waves don't stack unfairly.
+    zones.sort((a, b) => a.s - b.s);
+    return zones.filter((z, i) => i === 0 || z.s - zones[i - 1]!.s > 22);
   }
 
   /** Reachable lateral bands for rest spots: right side, and the left edge of
@@ -613,7 +628,7 @@ export class RunState implements GameState {
       });
     }
     this.pickpockets.fixedUpdate(dt, this.player, this.score, this.corridor.halfWidth(this.player.s));
-    this.streetLife.fixedUpdate(dt, this.player, this.crowd);
+    this.streetLife.fixedUpdate(dt, this.player, this.crowd, this.score);
     this.interactions.fixedUpdate(dt, this.player, this.score);
     this.updateTutorial();
     this.director.fixedUpdate(dt, this.player);
