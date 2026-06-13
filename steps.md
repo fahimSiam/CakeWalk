@@ -181,3 +181,9 @@
 - [x] Phone overlay still shows the real curved route map (player position projected back through the real route); crossing zones + rest stalls + props all placed by projected s
 - [x] 77 unit + 8 e2e green (corridor swap touched every renderer; all pass)
 - **2026-06-13**: M18b — always-straight corridor via route unrolling. NEXT (not yet done): turn-choice minigame at intersections (left/right/straight) with free-route deviation, fullscreen swipeable route-select showing turn building-names, phone deviation view.
+
+## M18c — Building name signs on the straight corridor ✅
+- [x] Building names render on boards at the footpath's right edge, facing the oncoming player (readable while walking). Root cause of earlier invisibility: signs were coplanar with the building wall (both at x=7.2) so the opaque wall hid them; moved to x=4.0 in front of the wall. Real OSM names confirmed (e.g. "T & T High School", "Ryans computers", "ফয়েজের দোকান")
+- [x] Floor-decal names were attempted but a flat-on-floor plane is edge-on/invisible at the chase-cam angle — kept readable upright boards instead (honest tradeoff)
+- [x] 77 unit + 8 e2e green
+- **2026-06-13**: M18c. STILL PENDING from this feedback round (large coupled rework, not yet built): turn-choice minigame at intersections (left/right/straight) with free-route deviation + re-planning, fullscreen swipeable route-select showing turn building-names, phone deviation view.

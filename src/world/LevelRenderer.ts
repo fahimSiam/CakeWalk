@@ -32,7 +32,7 @@ import { buildRickshawGeometry, paintColored } from '@/gfx/meshFactory';
 import {
   FACADE_FOR_KIND,
   facadeTexture,
-  makeFloorLabel,
+  makeSignboard,
   type FacadeStyle,
 } from '@/gfx/facades';
 import { MeshBasicMaterial } from 'three';
@@ -350,10 +350,6 @@ export class LevelRenderer {
       w: number;
       h: number;
       kind: string;
-      labelX: number;
-      labelZ: number;
-      dirX: number;
-      dirZ: number;
       name?: string;
     }
     const facades: Facade[] = [];
@@ -392,20 +388,7 @@ export class LevelRenderer {
       // route elsewhere and engulf the camera. If this facade lands within the
       // walkway of *any* part of the route, drop it (a gap beats an occlusion).
       if (project([x, z]).dist < 6) continue;
-      const facade: Facade = {
-        s: pr.s,
-        x,
-        z,
-        angle: Math.atan2(pr.dz, -pr.dx),
-        w,
-        h,
-        kind,
-        // Footpath point in front of the building, where the floor label goes.
-        labelX: pr.baseX + -pr.dz * 2.6,
-        labelZ: pr.baseZ + pr.dx * 2.6,
-        dirX: pr.dx,
-        dirZ: pr.dz,
-      };
+      const facade: Facade = { s: pr.s, x, z, angle: Math.atan2(pr.dz, -pr.dx), w, h, kind };
       if (name) facade.name = name;
       facades.push(facade);
     }
@@ -427,14 +410,15 @@ export class LevelRenderer {
       let list = byStyle.get(style);
       if (!list) byStyle.set(style, (list = []));
       list.push(geo);
-      // The building's name is painted flat on the footpath in front of it.
+      // Name on a board standing at the footpath's right edge, IN FRONT of the
+      // wall (not coplanar with it) and facing the oncoming player so it reads
+      // clearly while walking. The straight corridor runs down -Z, so the
+      // player approaches from +Z → the sign faces +Z (rotation.y = 0).
       if (f.name && signs < 44) {
-        const label = makeFloorLabel(f.name, signs);
-        label.position.set(f.labelX, 0.05, f.labelZ);
-        // Lie flat (rotation.x already -90), then spin about up-axis to read
-        // along the walking direction.
-        label.rotation.z = -Math.atan2(f.dirX, f.dirZ);
-        this.group.add(label);
+        const big = f.h > 8 || f.kind === 'hospital' || f.kind === 'school' || f.kind === 'landmark';
+        const sign = makeSignboard(f.name, signs, big);
+        sign.position.set(4.0, big ? 2.0 : 1.5, f.z);
+        this.group.add(sign);
         signs++;
       }
     }
