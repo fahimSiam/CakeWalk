@@ -41,6 +41,7 @@ import { RewindFx } from '@/gfx/RewindFx';
 import { RestMarker } from '@/gfx/RestMarker';
 import { CrossingMinigame } from '@/ui/CrossingMinigame';
 import { bendObject, makeBendUniforms, type BendUniforms } from '@/gfx/worldBend';
+import { straightenArea, straightRoute } from '@/world/straighten';
 import {
   OUTFIT_COLORS,
   localDateKey,
@@ -87,6 +88,9 @@ export class RunState implements GameState {
   private bus!: EventBus;
   private rng!: Rng;
   private corridor!: Corridor;
+  /** Real curved route, used only to project world POIs/buildings → along-route
+   *  distance s. The run itself plays on a StraightCorridor. */
+  private projector: SplineCorridor | null = null;
   private player!: Player;
   private crowd!: CrowdSystem;
   private crowdRenderer!: CrowdRenderer;
@@ -153,9 +157,12 @@ export class RunState implements GameState {
     this.bus = new EventBus();
     this.rng = new Rng(p.seed);
     if (p.route) {
-      this.corridor = new SplineCorridor(p.route.pts);
-      this.runLength = Math.max(50, this.corridor.length - 5);
+      // Always-straight corridor: project the real route for s, but walk straight.
+      this.projector = new SplineCorridor(p.route.pts);
+      this.runLength = Math.max(50, this.projector.length - 5);
+      this.corridor = new StraightCorridor(this.projector.length + 60, CORRIDOR_HALF_WIDTH);
     } else {
+      this.projector = null;
       this.corridor = new StraightCorridor(RUN_LENGTH + 60, CORRIDOR_HALF_WIDTH);
       this.runLength = RUN_LENGTH;
     }
@@ -334,9 +341,10 @@ export class RunState implements GameState {
     );
     this.ctx.audio.startRun(this.bus, this.atmosphere.weather === 'rain');
     this.bus.on('phoneCheckStarted', () => {
-      if (this.params.area && this.params.route) {
-        this.corridor.toWorld(this.player.s, this.player.t, this.pose);
-        this.phoneOverlay.show(this.params.area, this.params.route.pts, this.pose.x, this.pose.z);
+      if (this.params.area && this.params.route && this.projector) {
+        const rp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+        this.projector.toWorld(this.player.s, this.player.t, rp);
+        this.phoneOverlay.show(this.params.area, this.params.route.pts, rp.x, rp.z);
       }
     });
     this.bus.on('phoneCheckEnded', () => this.phoneOverlay.hide());
@@ -390,10 +398,10 @@ export class RunState implements GameState {
   private buildCrossingZones(): CrossingZone[] {
     const zones: CrossingZone[] = [];
     const { area, route } = this.params;
-    if (area && route && this.corridor instanceof SplineCorridor) {
+    if (area && route && this.projector) {
       for (const ni of route.nodePath.slice(1, -1)) {
         const node = area.graph.nodes[ni]!;
-        const s = this.corridor.closestS(node.pos[0], node.pos[1]);
+        const s = this.projector.closestS(node.pos[0], node.pos[1]);
         if (s < 25 || s > this.runLength - 15) continue;
         // Major intersections are harder; minor ones are quick dashes.
         const difficulty = node.majorCrossing ? route.traffic : Math.max(2, route.traffic - 1);
@@ -434,8 +442,8 @@ export class RunState implements GameState {
   private buildRoutePoints(): RoutePoint[] {
     const points: RoutePoint[] = [];
     const { area, route } = this.params;
-    if (area && route && this.corridor instanceof SplineCorridor) {
-      const corridor = this.corridor;
+    if (area && route && this.projector) {
+      const corridor = this.projector;
       const pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
       for (const poi of area.pois) {
         if (poi.kind !== 'chaDokan' && poi.kind !== 'busStop' && poi.kind !== 'tree') continue;
@@ -507,7 +515,7 @@ export class RunState implements GameState {
 
   /** World positions + facings for the seatable stalls (fed to LevelRenderer). */
   private buildRestStalls(): import('@/world/LevelRenderer').RestStall[] {
-    if (!(this.corridor instanceof SplineCorridor)) return [];
+    if (!this.projector) return [];
     const pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
     const stalls: import('@/world/LevelRenderer').RestStall[] = [];
     for (const p of this.interactions.points) {
@@ -836,8 +844,10 @@ export class RunState implements GameState {
     this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
     this.rewindFx.frame(frameDt);
     this.atmosphereHandle.frame(frameDt);
-    if (this.player.phoneLocked && this.params.area && this.params.route) {
-      this.phoneOverlay.updatePosition(this.params.area, this.params.route.pts, this.pose.x, this.pose.z);
+    if (this.player.phoneLocked && this.params.area && this.params.route && this.projector) {
+      const rp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+      this.projector.toWorld(this.player.s, this.player.t, rp);
+      this.phoneOverlay.updatePosition(this.params.area, this.params.route.pts, rp.x, rp.z);
     }
     this.hud.update(frameDt);
     this.ctx.renderer.render(this.scene, this.ctx.camera);
@@ -919,12 +929,13 @@ export class RunState implements GameState {
       z: this.pose.z,
     }));
 
-    if (this.params.area && this.params.route) {
-      // Real Dhaka: build the world from baked OSM data along the route.
+    if (this.params.area && this.params.route && this.projector) {
+      // Real Dhaka, unrolled straight: build from baked OSM data mapped into
+      // the straight corridor so the road never bends while walking.
       this.level = new LevelRenderer(
         this.scene,
-        this.params.area,
-        this.params.route.pts,
+        straightenArea(this.params.area, this.projector),
+        straightRoute(this.params.route.pts, this.projector),
         this.buildRestStalls(),
       );
       const end: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };

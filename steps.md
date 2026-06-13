@@ -174,3 +174,10 @@
 - [x] **Building names on the floor**: real OSM names painted FLAT on the footpath in front of each building (makeFloorLabel rounded plaque, lies flat, reads along the walking direction) instead of vertical boards — easier to read while walking
 - [x] 77 unit (+thieving-cat tests) + 8 e2e green (sit-prompt test clears zones so frequent crossings don't freeze its step loop)
 - **2026-06-13**: M18a checkpoint before the always-straight-corridor + turn-minigame rework.
+
+## M18b — Always-straight corridor ✅
+- [x] **The road is now dead straight while walking** (idea.md Rev 8 headline). The run plays on a StraightCorridor; the real curved OSM route is kept only as a *projector* (SplineCorridor) that maps world POIs/buildings → along-route distance s. New world/straighten.ts "unrolls" the area: every building footprint + POI is mapped through unroll(p)=(lateralOffset, -distanceAlongRoute), so real shops/landmarks keep their real along-route ORDER and spacing but the road never bends. LevelRenderer is unchanged — it just receives straightened data + a straight route line
+- [x] Eliminates ALL curve problems at the source: no occlusion, no engulfing facades, clean Subway-Surfers/Crossy-Roads endless-runner look; buildings right, road left, crowd ahead, all straight
+- [x] Phone overlay still shows the real curved route map (player position projected back through the real route); crossing zones + rest stalls + props all placed by projected s
+- [x] 77 unit + 8 e2e green (corridor swap touched every renderer; all pass)
+- **2026-06-13**: M18b — always-straight corridor via route unrolling. NEXT (not yet done): turn-choice minigame at intersections (left/right/straight) with free-route deviation, fullscreen swipeable route-select showing turn building-names, phone deviation view.
