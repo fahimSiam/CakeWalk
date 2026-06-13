@@ -17,6 +17,26 @@ test('graybox run boots without console errors and renders frames', async ({ pag
   expect(errors).toEqual([]);
 });
 
+test('route select previews turn landmarks and swipes between routes', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.goto('/?debug=1&seed=2&area=gulistan');
+  await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
+  await page.waitForTimeout(200);
+  // The turn-by-turn preview strip is present.
+  await expect(page.locator('text=🧭 turns')).toBeVisible();
+  await expect(page.locator('#cw-panel')).toContainText('Route 1');
+  await expect(page.locator('#cw-start')).toBeVisible();
+  // Swiping (arrow key) moves to the next route.
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(150);
+  await expect(page.locator('#cw-panel')).toContainText('Route 2');
+  // START launches the selected route.
+  await page.click('#cw-start');
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+  expect(errors).toEqual([]);
+});
+
 test('route select shows Dhanmondi routes and starts a real run', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));

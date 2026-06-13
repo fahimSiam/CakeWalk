@@ -195,3 +195,10 @@
 - [x] Off on the daily (leaderboard fairness) and tutorial; Sand Watch disabled while navigating (buffer is per-segment); RouteGraph exposed neighbors()/shortestNodePath()/describeRoute()
 - [x] 79 unit (+2 Navigator: junction detection/classification, replan reaches destination) + 9 e2e (+1: junction pops minigame, deviation re-plans + carries score) green; screenshot verified (LEFT/STRAIGHT/RIGHT with real landmark "নুরানী মাদরাসা"); marked-continue and deviation paths both verified
 - **2026-06-13**: M18d — the turn-by-turn navigation game is in. STILL PENDING from the round: fullscreen swipeable route-select showing turn building-names (the in-run navigation + phone deviation are done).
+
+## M18e — Fullscreen swipeable route-select with turn-landmark preview ✅
+- [x] Route-select rebuilt as a fullscreen swipeable carousel: swipe left/right (or ←/→ keys, or tap the page dots) to flip between the diverse routes; the area map highlights the current route A→B
+- [x] **Turn-by-turn preview** (reuses Navigator): every junction on the selected route is a numbered marker on the map with its direction + landmark building name, and a "🧭 turns" chip strip lists them in order ("1 ⬆️ B-14 · 2 ⬅️ left · 3 ➡️ Nurani Madrasah …") — study the landmarks here, then the in-run turn minigame quizzes you
+- [x] Per-route stats row (👥🚌🕶☕🛣), START button tinted per route; testApi.routeSelect (routes + start) preserved for tests
+- [x] 79 unit + 10 e2e (+1: preview strip present, arrow-swipe changes route, START launches) green; screenshots verified (Route 1 orange w/ markers 1-9, swipe → Route 2 green w/ markers 1-12)
+- **2026-06-13**: M18e — the whole Rev 8 feedback round is now complete (always-straight corridor, more crossings, thieving cats, vehicle proportions, building names, turn-by-turn navigation + free-route deviation, and the route-select turn preview).

@@ -1,17 +1,31 @@
 /**
- * Pre-level route puzzle (idea.md §3.3): canvas-drawn area map with random
- * A→B, up to 4 diverse routes with risk stats. Tap a route, then start.
+ * Pre-level route puzzle (idea.md §3.3 + Rev 8): a fullscreen, swipeable
+ * carousel of the diverse A→B routes. Each route shows the area map with that
+ * route highlighted, its risk stats, and — the new part — a turn-by-turn
+ * preview: the direction + landmark building name at every junction where you
+ * change roads, so you can MEMORISE the route before you set off (the in-run
+ * turn minigame then quizzes you on it). Swipe left/right between routes; tap
+ * START to walk it.
  */
 import type { GameState } from '@/core/StateMachine';
 import type { GameContext } from '@/core/GameContext';
 import type { BakedArea, Vec2 } from '@/world/levelTypes';
 import { RouteGraph, type RouteOption } from '@/routing/RouteGraph';
+import { Navigator, type TurnDir } from '@/world/Navigator';
+import { SplineCorridor } from '@/world/SplineCorridor';
 import { Rng } from '@/core/Rng';
 import { loadArea } from '@/world/levelStore';
 import { OSM_ATTRIBUTION } from '@/world/levelTypes';
 import { spendEnergy } from '@/meta/Energy';
 
 const ROUTE_COLORS = ['#e8a33d', '#5bbf6e', '#5b9fd6', '#c75bb1'];
+const ARROW: Record<TurnDir, string> = { left: '⬅️', straight: '⬆️', right: '➡️' };
+
+interface TurnInfo {
+  dir: TurnDir;
+  landmark?: string;
+  pos: Vec2;
+}
 
 export interface RouteSelectParams {
   areaId: string;
@@ -23,12 +37,14 @@ export class RouteSelectState implements GameState {
   private root: HTMLDivElement | null = null;
   private area: BakedArea | null = null;
   private routes: RouteOption[] = [];
+  private turnsByRoute: TurnInfo[][] = [];
   private selected = 0;
   private endpoints = { a: 0, b: 0 };
   private seed = 1;
   private daily = false;
-  /** Bumped on enter/exit so a stale async load can't build UI post-exit. */
   private generation = 0;
+  private touchX: number | null = null;
+  private keyHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(private ctx: GameContext) {}
 
@@ -43,11 +59,22 @@ export class RouteSelectState implements GameState {
     const area = await loadArea(p.areaId);
     if (generation !== this.generation) return; // state exited while loading
     this.area = area;
-    const graph = new RouteGraph(this.area);
+    const graph = new RouteGraph(area);
     const rng = new Rng(p.seed).stream('route');
     this.endpoints = graph.pickEndpoints(rng);
     this.routes = graph.findRoutes(this.endpoints.a, this.endpoints.b);
     this.selected = 0;
+    // Turn-by-turn preview per route (junction direction + landmark).
+    this.turnsByRoute = this.routes.map((route) => {
+      const projector = new SplineCorridor(route.pts);
+      const nav = new Navigator(area, graph, route, projector, projector.length - 5);
+      return nav.decisionPoints.map((dp) => {
+        const marked = dp.branches.find((b) => b.marked) ?? dp.branches[0]!;
+        const info: TurnInfo = { dir: marked.dir, pos: area.graph.nodes[dp.node]!.pos };
+        if (marked.landmark) info.landmark = marked.landmark;
+        return info;
+      });
+    });
     this.buildUi();
 
     this.ctx.testApi.routeSelect = {
@@ -61,46 +88,98 @@ export class RouteSelectState implements GameState {
     this.root = document.createElement('div');
     this.root.style.cssText =
       'position:fixed;inset:0;z-index:15;background:#221a10;color:#fff;font-family:system-ui;' +
-      'display:flex;flex-direction:column;overflow:hidden';
+      'display:flex;flex-direction:column;overflow:hidden;touch-action:pan-y';
     this.root.innerHTML = `
       <div style="padding:max(12px,env(safe-area-inset-top)) 16px 4px;display:flex;justify-content:space-between;align-items:baseline">
         <div style="font-size:22px;font-weight:800">${area.nameEn} <span style="opacity:.7;font-size:15px">${area.nameBn}</span></div>
-        <div style="font-size:12px;opacity:.6">${OSM_ATTRIBUTION}</div>
+        <div style="font-size:11px;opacity:.55">${OSM_ATTRIBUTION}</div>
       </div>
       <canvas id="cw-map" style="flex:1;width:100%;touch-action:none"></canvas>
-      <div id="cw-cards" style="display:flex;gap:8px;overflow-x:auto;padding:10px 12px max(12px,env(safe-area-inset-bottom))"></div>
+      <div id="cw-panel"></div>
     `;
     document.body.appendChild(this.root);
-    this.drawCards();
+
+    // Swipe between routes (touch) + arrow keys.
+    this.root.addEventListener('touchstart', this.onTouchStart, { passive: true });
+    this.root.addEventListener('touchend', this.onTouchEnd, { passive: true });
+    this.keyHandler = (e: KeyboardEvent): void => {
+      if (e.code === 'ArrowLeft') this.selectRoute(this.selected - 1);
+      else if (e.code === 'ArrowRight') this.selectRoute(this.selected + 1);
+      else if (e.code === 'Enter') this.start(this.selected);
+    };
+    window.addEventListener('keydown', this.keyHandler);
+
+    this.buildPanel();
     requestAnimationFrame(() => this.drawMap());
   }
 
-  private drawCards(): void {
-    const cards = this.root!.querySelector<HTMLDivElement>('#cw-cards')!;
-    cards.innerHTML = '';
-    this.routes.forEach((r, i) => {
-      const el = document.createElement('button');
-      const sel = i === this.selected;
-      el.style.cssText =
-        `min-width:148px;text-align:left;border-radius:12px;padding:10px 12px;border:2px solid ${sel ? ROUTE_COLORS[i] : 'transparent'};` +
-        `background:${sel ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.07)'};color:#fff;font-family:inherit`;
-      el.innerHTML = `
-        <div style="font-weight:800;color:${ROUTE_COLORS[i]}">Route ${i + 1} · ${(r.lengthM / 1000).toFixed(1)} km</div>
-        <div style="font-size:12px;line-height:1.7;opacity:.9">
-          👥 crowd ${bar(r.crowd)}<br>🚌 traffic ${bar(r.traffic)}<br>🕶 pocketmar ${bar(r.pickpocket)}<br>
-          ☕ cha ${r.chaDokan} · 🛣 crossings ${r.crossings}
-        </div>
-        ${sel ? '<div style="margin-top:6px;font-weight:800;background:#e8a33d;color:#1a1208;border-radius:8px;text-align:center;padding:6px">START ➜</div>' : ''}
-      `;
-      el.addEventListener('click', () => {
-        if (this.selected === i) this.start(i);
-        else {
-          this.selected = i;
-          this.drawCards();
-          this.drawMap();
-        }
-      });
-      cards.appendChild(el);
+  private onTouchStart = (e: TouchEvent): void => {
+    this.touchX = e.changedTouches[0]!.clientX;
+  };
+
+  private onTouchEnd = (e: TouchEvent): void => {
+    if (this.touchX === null) return;
+    const dx = e.changedTouches[0]!.clientX - this.touchX;
+    this.touchX = null;
+    if (Math.abs(dx) > 50) this.selectRoute(this.selected + (dx < 0 ? 1 : -1));
+  };
+
+  private selectRoute(i: number): void {
+    const n = this.routes.length;
+    const next = ((i % n) + n) % n; // wrap
+    if (next === this.selected) return;
+    this.selected = next;
+    this.buildPanel();
+    this.drawMap();
+  }
+
+  private buildPanel(): void {
+    const panel = this.root!.querySelector<HTMLDivElement>('#cw-panel')!;
+    const r = this.routes[this.selected];
+    const color = ROUTE_COLORS[this.selected]!;
+    if (!r) {
+      panel.innerHTML = '<div style="padding:16px">No route.</div>';
+      return;
+    }
+    const turns = this.turnsByRoute[this.selected] ?? [];
+    const chips = turns.length
+      ? turns
+          .map(
+            (t, k) =>
+              `<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.08);` +
+              `border-radius:999px;padding:5px 11px;font-size:13px;white-space:nowrap">` +
+              `<b style="color:${color}">${k + 1}</b> ${ARROW[t.dir]} ${escapeHtml(t.landmark ?? t.dir)}</span>`,
+          )
+          .join('')
+      : '<span style="opacity:.6;font-size:13px">Straight through — no turns to remember 🎉</span>';
+    const dots = this.routes
+      .map(
+        (_, i) =>
+          `<span data-dot="${i}" style="width:9px;height:9px;border-radius:50%;cursor:pointer;` +
+          `background:${i === this.selected ? color : 'rgba(255,255,255,.28)'}"></span>`,
+      )
+      .join('');
+    panel.style.cssText =
+      'padding:10px 14px max(12px,env(safe-area-inset-bottom));background:rgba(0,0,0,.25);' +
+      'display:flex;flex-direction:column;gap:9px';
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:800;font-size:17px;color:${color}">Route ${this.selected + 1} · ${(r.lengthM / 1000).toFixed(1)} km</div>
+        <div style="font-size:12px;opacity:.85">👥${r.crowd} 🚌${r.traffic} 🕶${r.pickpocket} ☕${r.chaDokan} 🛣${r.crossings}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <span style="font-size:13px;opacity:.8;white-space:nowrap">🧭 turns</span>
+        <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px">${chips}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="display:flex;gap:7px;align-items:center">${dots}<span style="font-size:11px;opacity:.5;margin-left:4px">swipe ‹ ›</span></div>
+        <button id="cw-start" style="border:none;border-radius:11px;padding:11px 26px;font-weight:900;font-size:16px;
+          background:${color};color:#1a1208;font-family:inherit">START ➜</button>
+      </div>
+    `;
+    panel.querySelector('#cw-start')!.addEventListener('click', () => this.start(this.selected));
+    panel.querySelectorAll<HTMLSpanElement>('[data-dot]').forEach((d) => {
+      d.addEventListener('click', () => this.selectRoute(Number(d.dataset.dot)));
     });
   }
 
@@ -111,7 +190,7 @@ export class RouteSelectState implements GameState {
     canvas.width = rect.width * devicePixelRatio;
     canvas.height = rect.height * devicePixelRatio;
     const g = canvas.getContext('2d')!;
-    g.scale(devicePixelRatio, devicePixelRatio);
+    g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
 
     const [minX, minZ, maxX, maxZ] = area.bbox;
     const pad = 16;
@@ -151,40 +230,31 @@ export class RouteSelectState implements GameState {
       g.lineWidth = road.class === 'major' ? 3 : 1.2;
       g.stroke();
     }
-    // Landmarks labels (a few, real names).
-    g.fillStyle = '#cbbd9d';
-    g.font = '10px system-ui';
-    let labels = 0;
-    for (const poi of area.pois) {
-      if (poi.kind === 'landmark' && poi.name && labels < 8) {
-        g.fillText(poi.name, X(poi.pos) + 4, Y(poi.pos));
-        g.fillRect(X(poi.pos) - 1.5, Y(poi.pos) - 1.5, 3, 3);
-        labels++;
-      }
-    }
-    // Routes (unselected dim, selected bright).
+    // Other routes dim.
     this.routes.forEach((r, i) => {
       if (i === this.selected) return;
       poly(r.pts, false);
-      g.strokeStyle = ROUTE_COLORS[i] + '55';
+      g.strokeStyle = ROUTE_COLORS[i] + '44';
       g.lineWidth = 2.5;
       g.stroke();
     });
+    // Selected route bright.
     const sel = this.routes[this.selected];
+    const color = ROUTE_COLORS[this.selected]!;
     if (sel) {
       poly(sel.pts, false);
-      g.strokeStyle = ROUTE_COLORS[this.selected]!;
+      g.strokeStyle = color;
       g.lineWidth = 4;
       g.stroke();
     }
     // A/B markers.
     const a = area.graph.nodes[this.endpoints.a]!.pos;
     const b = area.graph.nodes[this.endpoints.b]!.pos;
-    for (const [p, label, color] of [
+    for (const [p, label, c] of [
       [a, 'A', '#5bbf6e'],
       [b, 'B', '#e05c4a'],
     ] as const) {
-      g.fillStyle = color;
+      g.fillStyle = c;
       g.beginPath();
       g.arc(X(p), Y(p), 9, 0, Math.PI * 2);
       g.fill();
@@ -194,13 +264,35 @@ export class RouteSelectState implements GameState {
       g.fillText(label, X(p), Y(p) + 4);
       g.textAlign = 'left';
     }
+    // Numbered turn markers + landmark labels for the selected route.
+    const turns = this.turnsByRoute[this.selected] ?? [];
+    turns.forEach((t, k) => {
+      const x = X(t.pos);
+      const y = Y(t.pos);
+      g.fillStyle = color;
+      g.beginPath();
+      g.arc(x, y, 8, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#1a1208';
+      g.font = 'bold 11px system-ui';
+      g.textAlign = 'center';
+      g.fillText(String(k + 1), x, y + 4);
+      g.textAlign = 'left';
+      if (t.landmark) {
+        g.font = '10px system-ui';
+        const label = `${ARROW[t.dir]} ${t.landmark}`;
+        const w = g.measureText(label).width;
+        g.fillStyle = 'rgba(20,14,8,.8)';
+        g.fillRect(x + 10, y - 8, w + 8, 15);
+        g.fillStyle = '#f3e6c8';
+        g.fillText(label, x + 14, y + 3);
+      }
+    });
   }
 
   private start(i: number): void {
     const route = this.routes[i];
     if (!route || !this.area) return;
-    // A fresh run costs energy (retries are free and bypass this screen).
-    // The daily is the shared challenge and is always playable.
     if (!this.daily) {
       let ok = false;
       this.ctx.save.update((d) => (ok = spendEnergy(d)));
@@ -220,6 +312,8 @@ export class RouteSelectState implements GameState {
 
   exit(): void {
     this.generation++;
+    if (this.keyHandler) window.removeEventListener('keydown', this.keyHandler);
+    this.keyHandler = null;
     this.root?.remove();
     this.root = null;
     delete this.ctx.testApi.routeSelect;
@@ -229,6 +323,6 @@ export class RouteSelectState implements GameState {
   render(_alpha: number, _frameDt: number): void {}
 }
 
-function bar(v: number): string {
-  return '▰'.repeat(Math.max(1, Math.min(5, v))) + '▱'.repeat(5 - Math.max(1, Math.min(5, v)));
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 }
