@@ -42,6 +42,9 @@ import { RestMarker } from '@/gfx/RestMarker';
 import { CrossingMinigame } from '@/ui/CrossingMinigame';
 import { bendObject, makeBendUniforms, type BendUniforms } from '@/gfx/worldBend';
 import { straightenArea, straightRoute } from '@/world/straighten';
+import { Navigator, type DecisionPoint } from '@/world/Navigator';
+import { RouteGraph } from '@/routing/RouteGraph';
+import { TurnMinigame } from '@/ui/TurnMinigame';
 import {
   OUTFIT_COLORS,
   localDateKey,
@@ -70,6 +73,22 @@ export interface RunParams {
   daily?: boolean;
   /** FTUE: scripted teaching beats, unrated, no energy cost. */
   tutorial?: boolean;
+  /** Set when this run continues a journey after a turn-minigame deviation:
+   *  carries the player's vitals/score forward and skips one-time setup. */
+  carryOver?: RunCarryOver;
+}
+
+export interface RunCarryOver {
+  health: number;
+  stamina: number;
+  taka: number;
+  combo: number;
+  bestCombo: number;
+  nearMisses: number;
+  stolenTotal: number;
+  summary: RunSummary;
+  elapsed: number;
+  glassesActive: boolean;
 }
 
 /** Teaching beats by distance along the tutorial route (idea.md §9). */
@@ -141,6 +160,9 @@ export class RunState implements GameState {
   private camLook = { x: 0, z: 0 };
   private restMarker!: RestMarker;
   private crossingGame = new CrossingMinigame();
+  private turnGame = new TurnMinigame();
+  private navigator: Navigator | null = null;
+  private nextDecision = 0;
   private bendUniforms: BendUniforms = makeBendUniforms();
 
   constructor(private ctx: GameContext) {}
@@ -149,6 +171,8 @@ export class RunState implements GameState {
     const p = (params as RunParams | undefined) ?? { seed: 1 };
     this.params = p;
     this.finished = false;
+    this.prevS = 0;
+    this.prevT = 0;
     this.elapsed = 0;
     this.reviveUsed = false;
     this.summary = { chaCups: 0, fruits: 0, directCrossings: 0, nearMisses: 0, spotted: 0, distanceM: 0 };
@@ -165,6 +189,14 @@ export class RunState implements GameState {
       this.projector = null;
       this.corridor = new StraightCorridor(RUN_LENGTH + 60, CORRIDOR_HALF_WIDTH);
       this.runLength = RUN_LENGTH;
+    }
+    // Turn-by-turn navigation: real junctions become quick-tap "which way?"
+    // popups. Off on the daily (leaderboard fairness) and the tutorial.
+    this.navigator = null;
+    this.nextDecision = 0;
+    if (p.area && p.route && this.projector && !p.daily && !p.tutorial) {
+      const graph = new RouteGraph(p.area);
+      this.navigator = new Navigator(p.area, graph, p.route, this.projector, this.runLength);
     }
     this.player = new Player();
     this.score = new RunScore(this.bus);
@@ -266,9 +298,14 @@ export class RunState implements GameState {
       save.ownedItems.includes('sandWatch') ||
       (p.items?.includes('sandWatch') ?? false) ||
       new URLSearchParams(location.search).has('sandwatch');
-    this.sandWatch.enabled = !p.daily;
-    // Glasses are a 3-run consumable: burn one charge at run start.
-    if (save.glassesCharges > 0) {
+    // Rewind is off while navigating a re-plannable journey (the buffer is
+    // sized per segment) and on the daily.
+    this.sandWatch.enabled = !p.daily && !p.carryOver && !this.navigator;
+    // Glasses are a 3-run consumable: burn one charge at run start — but NOT on
+    // a turn-deviation continuation (the charge was already spent).
+    if (p.carryOver) {
+      this.pickpockets.glassesActive = p.carryOver.glassesActive;
+    } else if (save.glassesCharges > 0) {
       this.pickpockets.glassesActive = true;
       this.ctx.save.update((d) => d.glassesCharges--);
     }
@@ -359,6 +396,38 @@ export class RunState implements GameState {
       streetLife: this.streetLife,
       interactions: this.interactions,
       sandWatch: this.sandWatch,
+      navigator: this.navigator,
+    };
+
+    if (p.carryOver) this.applyCarryOver(p.carryOver);
+  }
+
+  /** Carry vitals/score forward when a turn deviation re-enters the run. */
+  private applyCarryOver(c: RunCarryOver): void {
+    this.player.health = c.health;
+    this.player.stamina = c.stamina;
+    this.score.taka = c.taka;
+    this.score.combo = c.combo;
+    this.score.bestCombo = c.bestCombo;
+    this.score.nearMisses = c.nearMisses;
+    this.score.stolenTotal = c.stolenTotal;
+    this.summary = c.summary;
+    this.elapsed = c.elapsed;
+  }
+
+  /** Snapshot the live vitals/score for a turn-deviation continuation. */
+  private gatherCarryOver(): RunCarryOver {
+    return {
+      health: this.player.health,
+      stamina: this.player.stamina,
+      taka: this.score.taka,
+      combo: this.score.combo,
+      bestCombo: this.score.bestCombo,
+      nearMisses: this.score.nearMisses,
+      stolenTotal: this.score.stolenTotal,
+      summary: this.summary,
+      elapsed: this.elapsed,
+      glassesActive: this.pickpockets.glassesActive,
     };
   }
 
@@ -391,6 +460,54 @@ export class RunState implements GameState {
       // 1..5 around the route average → roughly 0.6×..1.5×.
       return Math.max(0.55, Math.min(1.55, 0.55 + (crowd / avg) * 0.45));
     };
+  }
+
+  /** Pop the "which way?" minigame when the player reaches the next junction. */
+  private maybeOpenTurn(): void {
+    if (!this.navigator || this.turnGame.active || this.crossingGame.active) return;
+    const dps = this.navigator.decisionPoints;
+    while (
+      this.nextDecision < dps.length &&
+      (dps[this.nextDecision]!.consumed || dps[this.nextDecision]!.s < this.player.s - 6)
+    ) {
+      this.nextDecision++;
+    }
+    const dp = dps[this.nextDecision];
+    if (!dp || this.player.s < dp.s - 6) return;
+    dp.consumed = true;
+    const accent = OUTFIT_COLORS[this.ctx.save.get().equippedOutfit] ?? OUTFIT_COLORS.default!;
+    void this.turnGame.open(dp.branches, accent).then((res) => this.resolveTurn(dp, res));
+  }
+
+  private resolveTurn(dp: DecisionPoint, res: import('@/ui/TurnMinigame').TurnResult): void {
+    const { branch } = res;
+    if (branch.marked) {
+      // Stayed on the planned route.
+      if (res.onTime) {
+        this.score.add(8, 'turn');
+        this.hud.toast(t('onRoute'), 0);
+      }
+      this.prevS = this.player.s;
+      this.prevT = this.player.t;
+      return;
+    }
+    // Deviation: re-plan to the destination and re-enter the run on the new
+    // road, carrying vitals/score forward.
+    const newRoute = this.navigator?.replan(dp, branch) ?? null;
+    if (!newRoute) {
+      this.prevS = this.player.s;
+      this.prevT = this.player.t;
+      return;
+    }
+    const next: RunParams = {
+      seed: this.params.seed,
+      ...(this.params.area ? { area: this.params.area } : {}),
+      route: newRoute,
+      ...(this.params.items ? { items: this.params.items } : {}),
+      carryOver: this.gatherCarryOver(),
+    };
+    this.hud.toast(t('newRoute'), 0);
+    this.ctx.machine.transition('run', next);
   }
 
   /** Crossing zones: every route intersection plus gap-fillers so the player
@@ -550,6 +667,7 @@ export class RunState implements GameState {
     this.lifeRenderer.dispose(this.scene);
     this.restMarker.dispose(this.scene);
     this.crossingGame.dispose();
+    this.turnGame.dispose();
     this.level?.dispose(this.scene);
     this.level = null;
     this.atmosphereHandle.dispose();
@@ -574,8 +692,8 @@ export class RunState implements GameState {
 
   fixedUpdate(dt: number): void {
     if (this.finished) return;
-    // The Crossy-Roads crossing owns the screen; street time is frozen.
-    if (this.crossingGame.active) return;
+    // The crossing / turn popups own the screen; street time is frozen.
+    if (this.crossingGame.active || this.turnGame.active) return;
 
     // Sand Watch rewind owns the tick while active.
     const rewind = this.sandWatch.fixedUpdate(dt);
@@ -624,6 +742,9 @@ export class RunState implements GameState {
     if (!wasExhausted && this.player.exhausted) this.bus.emit('staminaEmpty', {});
     this.crowd.fixedUpdate(dt, this.player);
     this.traffic.fixedUpdate(dt, this.player, this.score);
+    // Arriving at a junction → the "which way?" turn minigame takes over.
+    this.maybeOpenTurn();
+    if (this.turnGame.active) return;
     // Arriving at a major road → the Crossy-Roads minigame takes over.
     const zone = this.traffic.pendingZone;
     if (zone && !this.crossingGame.active && this.traffic.overbridgeTimer <= 0) {
@@ -874,7 +995,8 @@ export class RunState implements GameState {
       taka: this.score.taka,
       bestCombo: this.score.bestCombo,
       nearMisses: this.score.nearMisses,
-      distance: Math.round(this.player.s),
+      // Total journey distance (accumulates across turn-deviation segments).
+      distance: Math.round(this.summary.distanceM),
       timeS: this.elapsed,
       healthFraction: this.player.health / HEALTH_MAX,
       stolenTotal: this.score.stolenTotal,

@@ -187,3 +187,11 @@
 - [x] Floor-decal names were attempted but a flat-on-floor plane is edge-on/invisible at the chase-cam angle — kept readable upright boards instead (honest tradeoff)
 - [x] 77 unit + 8 e2e green
 - **2026-06-13**: M18c. STILL PENDING from this feedback round (large coupled rework, not yet built): turn-choice minigame at intersections (left/right/straight) with free-route deviation + re-planning, fullscreen swipeable route-select showing turn building-names, phone deviation view.
+
+## M18d — Navigator + turn minigame (free-route navigation) ✅
+- [x] **world/Navigator.ts**: walks the OSM graph to find real junctions along the route (degree≥3 nodes with ≥2 branches, ≥22 m apart). Each branch is classified left/straight/right by the signed angle between the arrival heading and the branch direction (real geometry), and tagged with a nearby landmark name (named building/POI ~25 m down that road) so you navigate by memory. `replan(dp, branch)` re-plans branch→destination via the graph
+- [x] **ui/TurnMinigame.ts**: a "🧭 Which way?" popup at each junction — big LEFT/STRAIGHT/RIGHT cards with the landmark under each, a countdown bar (3.6 s), tap or ⬅️⬆️➡️/WASD. Timing out keeps you on plan (forgiving, no bonus)
+- [x] **Free-route deviation**: picking the planned road continues seamlessly (+8 on-time bonus, "🧭 On route!"); picking ANY other road re-plans to the destination and re-enters the run on the new road via StateMachine (clean dispose+rebuild), carrying health/stamina/taka/combo/summary/elapsed forward (RunParams.carryOver). The phone still shows the (new) planned route map; total journey distance accumulates across segments
+- [x] Off on the daily (leaderboard fairness) and tutorial; Sand Watch disabled while navigating (buffer is per-segment); RouteGraph exposed neighbors()/shortestNodePath()/describeRoute()
+- [x] 79 unit (+2 Navigator: junction detection/classification, replan reaches destination) + 9 e2e (+1: junction pops minigame, deviation re-plans + carries score) green; screenshot verified (LEFT/STRAIGHT/RIGHT with real landmark "নুরানী মাদরাসা"); marked-continue and deviation paths both verified
+- **2026-06-13**: M18d — the turn-by-turn navigation game is in. STILL PENDING from the round: fullscreen swipeable route-select showing turn building-names (the in-run navigation + phone deviation are done).

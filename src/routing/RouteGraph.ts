@@ -72,6 +72,21 @@ export class RouteGraph {
     return { a: 0, b: best };
   }
 
+  /** Edges incident to a node: {edge index, neighbour node}. */
+  neighbors(node: number): { edge: number; to: number }[] {
+    return (this.adj[node] ?? []).map((a) => ({ edge: a.edge, to: a.to }));
+  }
+
+  /** Shortest unpenalized node/edge path a→b (for re-planning after a turn). */
+  shortestNodePath(a: number, b: number): { nodePath: number[]; edgePath: number[] } | null {
+    return this.shortestPath(a, b, new Map());
+  }
+
+  /** Build a full RouteOption (pts + stats) from a node/edge path. */
+  describeRoute(nodePath: number[], edgePath: number[]): RouteOption {
+    return this.describe(nodePath, edgePath);
+  }
+
   /** Up to K diverse routes A→B via penalty-based iterative Dijkstra. */
   findRoutes(a: number, b: number): RouteOption[] {
     const penalties = new Map<number, number>();

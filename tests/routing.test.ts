@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { RouteGraph } from '@/routing/RouteGraph';
 import { Rng } from '@/core/Rng';
 import { SplineCorridor } from '@/world/SplineCorridor';
+import { Navigator } from '@/world/Navigator';
 import type { BakedArea } from '@/world/levelTypes';
 
 const area = JSON.parse(
@@ -70,6 +71,51 @@ describe('RouteGraph', () => {
       expect(r.pickpocket).toBeLessThanOrEqual(5);
       expect(r.crossings).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe('Navigator (turn-by-turn)', () => {
+  const graph = new RouteGraph(area);
+
+  // Find a seeded route that actually passes through junctions.
+  function routeWithJunctions(): { route: ReturnType<RouteGraph['findRoutes']>[number]; nav: Navigator } {
+    for (let seed = 1; seed < 40; seed++) {
+      const { a, b } = graph.pickEndpoints(new Rng(seed).stream('route'));
+      const route = graph.findRoutes(a, b)[0];
+      if (!route) continue;
+      const projector = new SplineCorridor(route.pts);
+      const nav = new Navigator(area, graph, route, projector, projector.length - 5);
+      if (nav.decisionPoints.length > 0) return { route, nav };
+    }
+    throw new Error('no junctions found in 40 seeds');
+  }
+
+  it('detects junctions with classified branches that include the planned road', () => {
+    const { nav } = routeWithJunctions();
+    expect(nav.decisionPoints.length).toBeGreaterThan(0);
+    for (const dp of nav.decisionPoints) {
+      expect(dp.branches.length).toBeGreaterThanOrEqual(2);
+      for (const br of dp.branches) {
+        expect(['left', 'straight', 'right']).toContain(br.dir);
+      }
+      // Exactly one branch keeps you on the planned route, and it's markedEdge.
+      const marked = dp.branches.filter((b) => b.marked);
+      expect(marked.length).toBe(1);
+      expect(marked[0]!.edge).toBe(dp.markedEdge);
+    }
+  });
+
+  it('re-plans a deviation to a route that still reaches the destination', () => {
+    const { route, nav } = routeWithJunctions();
+    const dest = route.nodePath[route.nodePath.length - 1]!;
+    const dp = nav.decisionPoints[0]!;
+    const deviation = dp.branches.find((b) => !b.marked)!;
+    const newRoute = nav.replan(dp, deviation);
+    expect(newRoute).not.toBeNull();
+    expect(newRoute!.nodePath[0]).toBe(dp.node);
+    expect(newRoute!.nodePath[newRoute!.nodePath.length - 1]).toBe(dest);
+    expect(newRoute!.edgePath[0]).toBe(deviation.edge);
+    expect(newRoute!.lengthM).toBeGreaterThan(0);
   });
 });
 

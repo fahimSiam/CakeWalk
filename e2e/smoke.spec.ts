@@ -123,7 +123,9 @@ test('crossing minigame opens at a major road and resolves', async ({ page }) =>
     const run = api.ctx.testApi.run as {
       player: { health: number };
       traffic: { pendingZone: unknown };
+      navigator: { decisionPoints: unknown[] } | null;
     };
+    if (run.navigator) run.navigator.decisionPoints.length = 0; // isolate crossings
     for (let i = 0; i < 30 * 600 && !run.traffic.pendingZone; i++) {
       api.inject({ speed: 1 });
       api.step(1);
@@ -144,6 +146,67 @@ test('crossing minigame opens at a major road and resolves', async ({ page }) =>
   expect(crossed).toBe(true);
 });
 
+test('a junction pops the turn minigame and a deviation re-plans the route', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await page.goto('/?debug=1&seed=2&area=gulistan');
+  await page.waitForFunction(() => Boolean(window.__cakewalk.ctx.testApi.routeSelect));
+  await page.evaluate(() => {
+    (window.__cakewalk.ctx.testApi.routeSelect as { start(i: number): void }).start(0);
+  });
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+
+  const info = await page.evaluate(() => {
+    const run = window.__cakewalk.ctx.testApi.run as {
+      navigator: { decisionPoints: { s: number; branches: { dir: string; marked: boolean }[] }[] };
+      traffic: { zones: unknown[]; pendingZone: unknown };
+      score: { taka: number; add(n: number, r: string): void };
+      player: { health: number; stamina: number; s: number };
+    };
+    window.__cakewalk.loop.timeScale = 0;
+    run.traffic.zones = [];
+    run.traffic.pendingZone = null;
+    run.score.add(120, 'test');
+    const dp = run.navigator.decisionPoints[0]!;
+    const deviate = dp.branches.find((b) => !b.marked)!;
+    for (let i = 0; i < 30 * 400; i++) {
+      window.__cakewalk.inject({ speed: 0.6 });
+      window.__cakewalk.step(1);
+      run.player.stamina = 100;
+      if (run.player.s > dp.s + 1) break;
+    }
+    return { count: run.navigator.decisionPoints.length, deviateDir: deviate.dir, taka: run.score.taka };
+  });
+  expect(info.count).toBeGreaterThan(0);
+
+  await expect(page.locator('text=Which way?')).toBeVisible();
+  // Take a road other than the planned one → the run re-plans + re-enters.
+  await page
+    .getByRole('button', { name: new RegExp(info.deviateDir, 'i') })
+    .first()
+    .click();
+  await expect(page.locator('text=Which way?')).toBeHidden();
+
+  const after = await page.evaluate(() => {
+    const run = window.__cakewalk.ctx.testApi.run as {
+      score: { taka: number };
+      player: { s: number };
+      navigator: { decisionPoints: unknown[] };
+    };
+    return {
+      active: window.__cakewalk.ctx.machine.activeName,
+      taka: run.score.taka,
+      s: run.player.s,
+      hasNav: Boolean(run.navigator),
+    };
+  });
+  expect(after.active).toBe('run');
+  expect(after.taka).toBe(info.taka); // vitals/score carried across the deviation
+  expect(after.s).toBeLessThan(5); // restarted at the head of the new road
+  expect(after.hasNav).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('walking up to a cha dokan pops the San-Andreas sit prompt', async ({ page }) => {
   await page.goto('/?debug=1&seed=11&area=dhanmondi');
   await page.waitForFunction(() => Boolean(window.__cakewalk?.ctx?.testApi?.routeSelect));
@@ -160,9 +223,11 @@ test('walking up to a cha dokan pops the San-Andreas sit prompt', async ({ page 
       player: { health: number; stamina: number };
       interactions: { nearRest: unknown };
       traffic: { zones: unknown[]; pendingZone: unknown };
+      navigator: { decisionPoints: unknown[] } | null;
     };
     run.traffic.zones = [];
     run.traffic.pendingZone = null;
+    if (run.navigator) run.navigator.decisionPoints.length = 0; // no turn popups
     for (let i = 0; i < 30 * 400; i++) {
       window.__cakewalk.inject({ speed: 0.6 });
       window.__cakewalk.step(1);
