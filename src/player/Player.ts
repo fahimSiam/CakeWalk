@@ -19,10 +19,10 @@ export enum Pose {
   Duck = 3,
 }
 
-export const SPEED_SHUFFLE = 1.1;
-export const SPEED_WALK = 2.4;
-export const SPEED_JOG = 5.0;
-const LATERAL_SPEED = 3.2; // m/s at full deflection
+export const SPEED_SHUFFLE = 1.4;
+export const SPEED_WALK = 3.0;
+export const SPEED_JOG = 6.2;
+const LATERAL_SPEED = 3.7; // m/s at full deflection
 const JUMP_DURATION = 0.55; // seconds
 const JUMP_HEIGHT = 1.0; // meters (apex)
 
@@ -33,7 +33,12 @@ const STAMINA_RECOVER_REST = 25;
 const STAMINA_LOCK_THRESHOLD = 25; // exhausted until back above this
 export const HEALTH_MAX = 100;
 
+/** How far left of the footpath centerline the player may step onto the road. */
+export const ROAD_EDGE_T = -3.4; // beyond this (more negative) = on the road
+
 export class Player {
+  /** Leftmost reach onto the road (lanes live at t ≈ -4.8 … -9.0). */
+  static readonly ROAD_REACH = 9.5;
   s = 0;
   t = 0;
   /** Render height (jump arc). */
@@ -114,12 +119,14 @@ export class Player {
       this.y = 0;
     }
 
-    // Move.
+    // Move. The footpath edge (building wall) limits the right; the LEFT opens
+    // onto the traffic road — the player may step out there as a high-risk
+    // shortcut (no crowd, but fast cars). The road collision lives in traffic.
     this.s += this.speed * dt;
     this.t += input.lateral * LATERAL_SPEED * dt;
     const hw = corridor.halfWidth(this.s) - 0.3;
-    if (this.t < -hw) this.t = -hw;
     if (this.t > hw) this.t = hw;
+    if (this.t < -Player.ROAD_REACH) this.t = -Player.ROAD_REACH;
 
     this.walkPhase += this.speed * dt * 2.2;
   }

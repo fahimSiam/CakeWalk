@@ -28,6 +28,7 @@ import { MAX_POCKETMARS, PickpocketSystem, PmState } from '@/pickpocket/Pickpock
 import { MAX_VEHICLES, TrafficSystem, VEHICLE_KINDS } from '@/traffic/TrafficSystem';
 import { StreetLife, MAX_COWS, CowState } from '@/world/StreetLife';
 import type { Corridor, PathPose } from '@/world/Corridor';
+import { applyWorldBend, type BendUniforms } from './worldBend';
 
 /** Translated BoxGeometry shorthand for assembling little creatures. */
 function box(w: number, h: number, d: number, x: number, y: number, z: number): BoxGeometry {
@@ -117,7 +118,12 @@ export class TrafficRenderer {
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
   private disposed = false;
 
-  constructor(scene: Scene, private traffic: TrafficSystem, private corridor: Corridor) {
+  constructor(
+    scene: Scene,
+    private traffic: TrafficSystem,
+    private corridor: Corridor,
+    private bend?: BendUniforms,
+  ) {
     const mat = (): MeshLambertMaterial =>
       new MeshLambertMaterial({ flatShading: true, vertexColors: true });
     VEHICLE_KINDS.forEach((kind, ki) => {
@@ -152,6 +158,7 @@ export class TrafficRenderer {
           (mesh.material as MeshLambertMaterial).dispose();
           mesh.geometry = model.geometry;
           mesh.material = model.material as MeshLambertMaterial;
+          if (this.bend) applyWorldBend(mesh.material, this.bend);
           this.kindScale[ki] = kind.length; // unit-length model → scale by length
         });
       }

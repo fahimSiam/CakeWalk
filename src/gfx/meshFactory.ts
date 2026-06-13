@@ -7,33 +7,33 @@
  *   limbId : 0 torso/head, 1 left leg, 2 right leg, 3 left arm, 4 right arm
  *   tint   : 1 = multiply by instance color (clothes), 0 = keep base color
  */
-import { BoxGeometry, BufferAttribute, BufferGeometry, Color } from 'three';
+import {
+  BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
+  CapsuleGeometry,
+  Color,
+  SphereGeometry,
+} from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
-export const SKIN = new Color('#c98e63');
+export const SKIN = new Color('#d39a6a');
 const HAIR = new Color('#2b2118');
-const PANTS = new Color('#494e57');
 
-interface Part {
-  geo: BoxGeometry;
-  limbId: number;
-  color: Color;
-  /** Clothes regions get tint=1 and are recolored per instance. */
-  tinted: boolean;
-}
-
-function paintPart(part: Part): BufferGeometry {
-  const geo = part.geo;
+/** Tag any geometry with the per-vertex attributes the walk shader reads. */
+function paintPart(geo: BufferGeometry, limbId: number, color: Color, tinted: boolean): BufferGeometry {
+  // Drop uv so every part merges with the same attribute set.
+  geo.deleteAttribute('uv');
   const count = geo.attributes.position!.count;
   const colors = new Float32Array(count * 3);
   const limb = new Float32Array(count);
   const tint = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    colors[i * 3] = part.color.r;
-    colors[i * 3 + 1] = part.color.g;
-    colors[i * 3 + 2] = part.color.b;
-    limb[i] = part.limbId;
-    tint[i] = part.tinted ? 1 : 0;
+    colors[i * 3] = color.r;
+    colors[i * 3 + 1] = color.g;
+    colors[i * 3 + 2] = color.b;
+    limb[i] = limbId;
+    tint[i] = tinted ? 1 : 0;
   }
   geo.setAttribute('color', new BufferAttribute(colors, 3));
   geo.setAttribute('limbId', new BufferAttribute(limb, 1));
@@ -42,73 +42,61 @@ function paintPart(part: Part): BufferGeometry {
 }
 
 /**
- * ~1.7 m tall cartoon person (Sims-ish proportions: big head, expressive
- * face), origin at feet. Clothes (torso, sleeves) are tinted by instance
- * color; skin/hair/pants stay fixed so one instanced mesh still reads as
- * varied people. Mesh forward is +Z.
+ * Chunky cartoon character (Fall-Guys / Among-Us bean): a big round head, a
+ * fat rounded costume body tinted by instance color, stubby capsule limbs and
+ * a simple two-eyed face. Origin at feet, ~1.75 m tall, forward = +Z. Limb
+ * pivots (legs 0.5 m, shoulders 1.2 m) match walkShader's HIP_Y/SHOULDER_Y.
  */
 export function buildPersonGeometry(): BufferGeometry {
-  const parts: Part[] = [];
-  const add = (
-    w: number,
-    h: number,
-    d: number,
-    x: number,
-    y: number,
-    z: number,
-    limbId: number,
-    color: Color,
-    tinted = false,
-  ) => {
-    const geo = new BoxGeometry(w, h, d);
-    geo.translate(x, y, z);
-    parts.push({ geo, limbId, color, tinted });
+  const parts: BufferGeometry[] = [];
+  const box = (w: number, h: number, d: number, x: number, y: number, z: number, l: number, c: Color, t = false) => {
+    const g = new BoxGeometry(w, h, d);
+    g.translate(x, y, z);
+    parts.push(paintPart(g, l, c, t));
+  };
+  const cap = (r: number, len: number, x: number, y: number, l: number, c: Color, t = false) => {
+    const g = new CapsuleGeometry(r, len, 2, 6);
+    g.translate(x, y, 0);
+    parts.push(paintPart(g, l, c, t));
+  };
+  const sphere = (r: number, x: number, y: number, z: number, l: number, c: Color, seg = 6) => {
+    const g = new SphereGeometry(r, seg, Math.max(4, seg - 2));
+    g.translate(x, y, z);
+    parts.push(paintPart(g, l, c, false));
   };
 
   const WHITE = new Color('#ffffff');
-  const EYE_WHITE = new Color('#f4f0e8');
-  const PUPIL = new Color('#221a12');
-  const MOUTH = new Color('#9a5a48');
+  const EYE_WHITE = new Color('#fbfaf6');
+  const PUPIL = new Color('#241c14');
 
-  // --- Head (cartoon-big) + neck, limb 0 (bobs with torso) ---
-  add(0.36, 0.34, 0.32, 0, 1.5, 0, 0, SKIN); // head
-  add(0.14, 0.08, 0.14, 0, 1.3, 0, 0, SKIN); // neck
-  // Hair: cap + back + sideburns frame the face.
-  add(0.39, 0.12, 0.35, 0, 1.69, -0.01, 0, HAIR);
-  add(0.38, 0.26, 0.08, 0, 1.55, -0.16, 0, HAIR);
-  add(0.05, 0.16, 0.3, -0.185, 1.58, -0.02, 0, HAIR);
-  add(0.05, 0.16, 0.3, 0.185, 1.58, -0.02, 0, HAIR);
-  // Ears.
-  add(0.04, 0.09, 0.07, -0.2, 1.49, 0.0, 0, SKIN);
-  add(0.04, 0.09, 0.07, 0.2, 1.49, 0.0, 0, SKIN);
-  // Face: white eyes with pupils, brows, nose, mouth.
-  add(0.09, 0.07, 0.02, -0.085, 1.54, 0.165, 0, EYE_WHITE);
-  add(0.09, 0.07, 0.02, 0.085, 1.54, 0.165, 0, EYE_WHITE);
-  add(0.04, 0.045, 0.025, -0.075, 1.535, 0.168, 0, PUPIL);
-  add(0.04, 0.045, 0.025, 0.075, 1.535, 0.168, 0, PUPIL);
-  add(0.1, 0.025, 0.02, -0.085, 1.6, 0.165, 0, HAIR); // brows
-  add(0.1, 0.025, 0.02, 0.085, 1.6, 0.165, 0, HAIR);
-  add(0.05, 0.07, 0.05, 0, 1.46, 0.17, 0, SKIN); // nose
-  add(0.11, 0.03, 0.02, 0, 1.39, 0.165, 0, MOUTH);
+  // --- Stubby legs (capsules), pivot at hip y≈0.5 ---
+  cap(0.13, 0.2, -0.15, 0.23, 1, new Color('#3c424b'));
+  cap(0.13, 0.2, 0.15, 0.23, 2, new Color('#3c424b'));
+  box(0.22, 0.1, 0.3, -0.15, 0.05, 0.05, 1, HAIR); // shoes
+  box(0.22, 0.1, 0.3, 0.15, 0.05, 0.05, 2, HAIR);
 
-  // --- Torso (shirt — tinted), slightly tapered look via two stacked boxes ---
-  add(0.46, 0.34, 0.26, 0, 1.1, 0, 0, WHITE, true);
-  add(0.42, 0.22, 0.24, 0, 0.84, 0, 0, WHITE, true);
+  // --- Fat rounded costume body (tinted), the bean ---
+  const body = new CapsuleGeometry(0.34, 0.18, 3, 10);
+  body.translate(0, 0.9, 0);
+  parts.push(paintPart(body, 0, WHITE, true));
 
-  // --- Legs (pants), pivot at hip y≈0.78 ---
-  add(0.17, 0.74, 0.2, -0.12, 0.37, 0, 1, PANTS);
-  add(0.17, 0.74, 0.2, 0.12, 0.37, 0, 2, PANTS);
-  // Shoes.
-  add(0.18, 0.08, 0.28, -0.12, 0.04, 0.03, 1, HAIR);
-  add(0.18, 0.08, 0.28, 0.12, 0.04, 0.03, 2, HAIR);
+  // --- Big round head + face ---
+  sphere(0.31, 0, 1.48, 0, 0, SKIN, 8);
+  box(0.42, 0.16, 0.34, 0, 1.7, -0.02, 0, HAIR); // cartoon hair cap
+  box(0.36, 0.2, 0.06, 0, 1.5, -0.27, 0, HAIR); // back hair
+  // Big cartoon eyes.
+  sphere(0.1, -0.12, 1.5, 0.24, 0, EYE_WHITE, 6);
+  sphere(0.1, 0.12, 1.5, 0.24, 0, EYE_WHITE, 6);
+  box(0.05, 0.07, 0.04, -0.12, 1.5, 0.32, 0, PUPIL);
+  box(0.05, 0.07, 0.04, 0.12, 1.5, 0.32, 0, PUPIL);
 
-  // --- Arms: sleeves (tinted) + skin hands, pivot at shoulder y≈1.2 ---
-  add(0.12, 0.42, 0.16, -0.3, 1.04, 0, 3, WHITE, true);
-  add(0.1, 0.16, 0.13, -0.3, 0.76, 0, 3, SKIN);
-  add(0.12, 0.42, 0.16, 0.3, 1.04, 0, 4, WHITE, true);
-  add(0.1, 0.16, 0.13, 0.3, 0.76, 0, 4, SKIN);
+  // --- Stubby arms (capsules, tinted) + little hands, pivot shoulder y≈1.2 ---
+  cap(0.1, 0.16, -0.42, 1.0, 3, WHITE, true);
+  cap(0.1, 0.16, 0.42, 1.0, 4, WHITE, true);
+  sphere(0.1, -0.42, 0.82, 0, 3, SKIN, 6);
+  sphere(0.1, 0.42, 0.82, 0, 4, SKIN, 6);
 
-  const merged = mergeGeometries(parts.map(paintPart), false);
+  const merged = mergeGeometries(parts, false);
   merged.computeVertexNormals();
   return merged;
 }

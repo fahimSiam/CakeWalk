@@ -12,7 +12,7 @@
  */
 import type { EventBus } from '@/core/EventBus';
 import type { RngStream } from '@/core/Rng';
-import type { Player } from '@/player/Player';
+import { ROAD_EDGE_T, type Player } from '@/player/Player';
 import type { RunScore } from '@/economy/RunScore';
 
 export const MAX_VEHICLES = 14;
@@ -28,14 +28,14 @@ export interface VehicleKind {
 }
 
 export const VEHICLE_KINDS: VehicleKind[] = [
-  { id: 'bus', speedMin: 8, speedMax: 11, length: 9, width: 2.6, color: '#b04a3a', height: 3 },
-  { id: 'cng', speedMin: 9, speedMax: 13, length: 2.6, width: 1.4, color: '#3a7d4f', height: 1.7 },
-  { id: 'rickshaw', speedMin: 4, speedMax: 6, length: 2.2, width: 1.1, color: '#4a5fb0', height: 1.8 },
-  { id: 'bike', speedMin: 12, speedMax: 16, length: 1.9, width: 0.8, color: '#333', height: 1.4 },
+  { id: 'bus', speedMin: 11, speedMax: 15, length: 9, width: 2.6, color: '#b04a3a', height: 3 },
+  { id: 'cng', speedMin: 12, speedMax: 17, length: 2.6, width: 1.4, color: '#3a7d4f', height: 1.7 },
+  { id: 'rickshaw', speedMin: 6, speedMax: 9, length: 2.2, width: 1.1, color: '#4a5fb0', height: 1.8 },
+  { id: 'bike', speedMin: 16, speedMax: 21, length: 1.9, width: 0.8, color: '#333', height: 1.4 },
 ];
 
 /** Road lanes left of the footpath (negative t), nearest first. */
-export const STREAM_LANES = [-4.8, -6.9, -9.0];
+export const STREAM_LANES = [-4.2, -6.1, -8.0, -9.6];
 
 export interface CrossingZone {
   s: number;
@@ -141,18 +141,33 @@ export class TrafficSystem {
 
   /** The endless oncoming stream beside the footpath. */
   private updateStream(dt: number, player: Player): void {
+    // High-risk road: if the player has stepped off the footpath onto the
+    // road (and isn't airborne / on the overbridge), oncoming cars can hit.
+    const onRoad = player.t < ROAD_EDGE_T && player.y < 0.9 && this.overbridgeTimer <= 0;
     let active = 0;
     for (let i = 0; i < MAX_VEHICLES; i++) {
       if (!this.vActive[i]) continue;
       this.vS[i]! -= this.vSpeed[i]! * dt; // always toward/past the player
+      if (onRoad) {
+        const kind = VEHICLE_KINDS[this.vKind[i]!]!;
+        if (
+          Math.abs(player.t - this.vT[i]!) < kind.width / 2 + player.hitHalfWidth &&
+          Math.abs(player.s - this.vS[i]!) < kind.length / 2 + 0.5
+        ) {
+          if (player.applyBump(28)) {
+            this.bus.emit('vehicleHit', { vehicleKind: kind.id });
+            player.t = ROAD_EDGE_T - 0.2; // shoved back toward the footpath
+          }
+        }
+      }
       if (this.vS[i]! < player.s - 20) {
         this.vActive[i] = 0;
         continue;
       }
       active++;
     }
-    const want = 9;
-    if (active < want && this.rng.chance(dt * 1.6)) {
+    const want = 12;
+    if (active < want && this.rng.chance(dt * 2.4)) {
       for (let i = 0; i < MAX_VEHICLES; i++) {
         if (this.vActive[i]) continue;
         const kindIdx = this.rng.weighted([0, 1, 2, 3], [2, 3, 2, 3]);

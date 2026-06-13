@@ -29,9 +29,9 @@ function steps(p: Player, n: number, i: InputIntent): void {
 describe('Player', () => {
   it('walks forward at walk speed by default', () => {
     const p = new Player();
-    steps(p, 60, intent());
-    expect(p.s).toBeGreaterThan(3.5);
-    expect(p.s).toBeLessThan(5.5);
+    steps(p, 60, intent()); // 2s; ~SPEED_WALK m/s after a brief accel ramp
+    expect(p.s).toBeGreaterThan(4.5);
+    expect(p.s).toBeLessThan(6.5);
   });
 
   it('sprint drains stamina and exhaustion forces shuffle', () => {

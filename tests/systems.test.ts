@@ -166,6 +166,23 @@ describe('TrafficSystem', () => {
     }
   });
 
+  it('stepping onto the road exposes the player to fast cars', () => {
+    const { bus, rng, player, score } = setup();
+    const traffic = new TrafficSystem(rng.stream('t'), bus);
+    traffic.setZones([]);
+    let hits = 0;
+    bus.on('vehicleHit', () => hits++);
+    player.t = -6; // out on the road, in the lanes
+    for (let i = 0; i < 30 * 30; i++) {
+      traffic.fixedUpdate(DT, player, score);
+      player.s += 2.4 * DT;
+      player.t = -6; // hold position on the road
+      bus.flush();
+    }
+    expect(hits).toBeGreaterThan(0);
+    expect(player.health).toBeLessThan(100);
+  });
+
   it('overbridge from a pending zone lifts the player safely across', () => {
     const { bus, rng, player, score } = setup();
     const traffic = new TrafficSystem(rng.stream('t'), bus);

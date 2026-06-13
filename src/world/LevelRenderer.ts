@@ -31,30 +31,46 @@ import type { BakedArea, BakedPoi, Vec2 } from './levelTypes';
 import { buildRickshawGeometry, paintColored } from '@/gfx/meshFactory';
 import {
   FACADE_FOR_KIND,
-  ROOF_TINT,
-  facadeMaterial,
+  facadeTexture,
   makeSignboard,
   type FacadeStyle,
 } from '@/gfx/facades';
+import { MeshBasicMaterial } from 'three';
 
 const BUILD_RADIUS = 130;
 
-// Rev 6 cartoon pivot: Fall-Guys candy palette, picked per building by
-// position hash so every street is a row of colorful blocks.
-const CANDY: Color[] = [
-  '#ffb3c7', '#9fe8d8', '#ffe08a', '#a8cfff', '#d4b8ff',
-  '#b5e89a', '#ffc89a', '#9fe0ef', '#f3a8a8', '#cfe8a0',
-].map((c) => new Color(c));
-const KIND_COLORS: Record<string, Color> = {
-  mosque: new Color('#b2f0d4'), // mosques/landmarks keep calmer signature tones
-  landmark: new Color('#f5e9c0'),
+// Rev 7: 2D facade wall, one signature color per building TYPE so the street
+// reads at a glance (hospital red, school blue, mosque green, …).
+const TYPE_COLOR: Record<string, Color> = {
+  hospital: new Color('#ff6b6b'),
+  school: new Color('#4f8fe8'),
+  mosque: new Color('#36c98a'),
+  market: new Color('#ffae42'),
+  shop: new Color('#ffd24d'),
+  landmark: new Color('#b07cf0'),
+  commercial: new Color('#46c4d6'),
+  residential: new Color('#f4a6c0'),
 };
 
-function candyFor(c: Vec2, kind: string): Color {
-  const fixed = KIND_COLORS[kind];
-  if (fixed) return fixed;
-  const h = (Math.abs(Math.round(c[0] * 7 + c[1] * 13)) | 0) % CANDY.length;
-  return CANDY[h]!;
+// Facade texture style per enriched POI type (building kinds use FACADE_FOR_KIND).
+const STYLE_FOR_TYPE: Record<string, FacadeStyle> = {
+  hospital: 'commercial',
+  school: 'commercial',
+  shop: 'shutter',
+  market: 'shutter',
+  mosque: 'plain',
+  landmark: 'plain',
+};
+
+/** Upright facade billboard facing +Z, bottom at y=0, UVs tiled by storey/bay. */
+function facadeQuad(w: number, h: number): BufferGeometry {
+  const g = new PlaneGeometry(w, h);
+  g.translate(0, h / 2, 0);
+  const u = w / BAY_M;
+  const v = h / STOREY_M;
+  const uv = g.getAttribute('uv');
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * u, uv.getY(i) * v);
+  return g;
 }
 
 export interface PlacedProp {
@@ -87,10 +103,9 @@ export class LevelRenderer {
     this.addRouteRibbon(routePts);
     this.addPolys(area.water, '#5fb0d8', 0.02);
     this.addPolys(area.parks, '#8fd06a', 0.01);
-    this.addBuildings(area, near);
+    this.addFacadeWall(area, routePts);
     this.addProps(area, near);
     this.addRestStalls(restStalls);
-    this.addSignboards(area, routePts);
     scene.add(this.group);
   }
 
@@ -285,66 +300,136 @@ export class LevelRenderer {
     }
   }
 
-  private addBuildings(area: BakedArea, near: (p: Vec2) => boolean): void {
-    // Walls grouped by facade style (textured), roofs merged separately
-    // (a tiling window texture on a roof would look broken).
-    const wallsByStyle = new Map<FacadeStyle, BufferGeometry[]>();
-    const roofGeos: BufferGeometry[] = [];
-    for (const b of area.buildings) {
-      const c = centroid(b.footprint);
-      if (!near(c)) continue;
-      const { walls, roof } = extrudeFootprint(b.footprint, b.height);
-      paintGeometry(walls, candyFor(c, b.kind));
-      paintGeometry(roof, ROOF_TINT);
-      const style = FACADE_FOR_KIND[b.kind] ?? 'residential';
-      let list = wallsByStyle.get(style);
-      if (!list) wallsByStyle.set(style, (list = []));
-      list.push(walls);
-      roofGeos.push(roof);
+  /**
+   * Buildings as a flat 2D facade wall pinned to the RIGHT edge of the
+   * walkway (idea.md Rev 7). Real OSM buildings are projected onto the route,
+   * laid out in along-route order, and drawn as upright textured billboards
+   * colored by *type* (hospital red, school blue, mosque green, market
+   * orange, shop yellow, landmark purple, commercial teal, residential pink),
+   * each named one carrying an English signboard. No 3D massing = nothing can
+   * occlude the player, and the type-colors read at a glance.
+   */
+  private addFacadeWall(area: BakedArea, routePts: Vec2[]): void {
+    const cum: number[] = [0];
+    for (let i = 1; i < routePts.length; i++) {
+      cum[i] =
+        cum[i - 1]! +
+        Math.hypot(routePts[i]![0] - routePts[i - 1]![0], routePts[i]![1] - routePts[i - 1]![1]);
     }
-    for (const [style, geos] of wallsByStyle) {
-      const merged = mergeGeometries(geos, false);
-      merged.computeVertexNormals();
-      this.group.add(new Mesh(merged, facadeMaterial(style)));
-    }
-    if (roofGeos.length) {
-      const merged = mergeGeometries(roofGeos, false);
-      merged.computeVertexNormals();
-      this.group.add(
-        new Mesh(merged, new MeshLambertMaterial({ vertexColors: true, flatShading: true })),
-      );
-    }
-  }
+    const project = (
+      p: Vec2,
+    ): { dist: number; s: number; baseX: number; baseZ: number; dx: number; dz: number } => {
+      let best = { dist: Infinity, s: 0, baseX: 0, baseZ: 0, dx: 0, dz: 1 };
+      for (let i = 1; i < routePts.length; i++) {
+        const a = routePts[i - 1]!;
+        const b = routePts[i]!;
+        const ex = b[0] - a[0];
+        const ez = b[1] - a[1];
+        const l2 = ex * ex + ez * ez;
+        if (l2 < 0.01) continue;
+        let f = ((p[0] - a[0]) * ex + (p[1] - a[1]) * ez) / l2;
+        f = Math.max(0, Math.min(1, f));
+        const bx = a[0] + f * ex;
+        const bz = a[1] + f * ez;
+        const d = Math.hypot(bx - p[0], bz - p[1]);
+        if (d < best.dist) {
+          const l = Math.sqrt(l2);
+          best = { dist: d, s: cum[i - 1]! + f * l, baseX: bx, baseZ: bz, dx: ex / l, dz: ez / l };
+        }
+      }
+      return best;
+    };
 
-  /** Real OSM names on signboards + building title boards (Dhaka's wall of signage). */
-  private addSignboards(area: BakedArea, routePts: Vec2[]): void {
-    const SIGN_KINDS = new Set(['shop', 'market', 'chaDokan', 'school', 'mosque', 'hospital', 'landmark']);
-    const named = area.pois.filter((p) => p.name && SIGN_KINDS.has(p.kind));
-    let count = 0;
-    for (const poi of named) {
-      if (count >= 40) break;
-      const { dist, dirX, dirZ } = nearestOnRoute(poi.pos, routePts);
-      if (dist > 16) continue;
-      const big = poi.kind === 'hospital' || poi.kind === 'school' || poi.kind === 'landmark';
-      const sign = makeSignboard(poi.name!, count, big);
-      sign.position.set(poi.pos[0], (big ? 3.6 : 2.7) + (count % 3) * 0.35, poi.pos[1]);
-      // Face along the street so it reads while walking past.
-      sign.rotation.y = Math.atan2(dirX, dirZ) + Math.PI / 2;
-      this.group.add(sign);
-      count++;
+    const namedPois = area.pois.filter((p) => p.name && p.kind in TYPE_COLOR);
+
+    interface Facade {
+      s: number;
+      x: number;
+      z: number;
+      angle: number;
+      w: number;
+      h: number;
+      kind: string;
+      name?: string;
     }
-    // Named real buildings get rooftop title boards (English where OSM has it).
-    let titles = 0;
+    const facades: Facade[] = [];
     for (const b of area.buildings) {
-      if (!b.name || titles >= 20) continue;
       const c = centroid(b.footprint);
-      const { dist, dirX, dirZ } = nearestOnRoute(c, routePts);
-      if (dist > 28) continue;
-      const board = makeSignboard(b.name, 7 + titles, true);
-      board.position.set(c[0], b.height + 1.1, c[1]);
-      board.rotation.y = Math.atan2(dirX, dirZ) + Math.PI / 2;
-      this.group.add(board);
-      titles++;
+      const pr = project(c);
+      if (pr.dist > 80) continue;
+      let minx = Infinity;
+      let maxx = -Infinity;
+      let minz = Infinity;
+      let maxz = -Infinity;
+      for (const v of b.footprint) {
+        minx = Math.min(minx, v[0]);
+        maxx = Math.max(maxx, v[0]);
+        minz = Math.min(minz, v[1]);
+        maxz = Math.max(maxz, v[1]);
+      }
+      const w = Math.max(4, Math.min(15, Math.max(maxx - minx, maxz - minz)));
+      const h = Math.max(3.2, Math.min(9, b.height));
+      let kind: string = b.kind;
+      let name = b.name;
+      // Adopt a nearby named POI's type/name (so hospitals/schools/shops show).
+      let bestD = 17 * 17;
+      for (const poi of namedPois) {
+        const dd = (poi.pos[0] - c[0]) ** 2 + (poi.pos[1] - c[1]) ** 2;
+        if (dd < bestD) {
+          bestD = dd;
+          kind = poi.kind;
+          name = poi.name;
+        }
+      }
+      const off = 7.2;
+      const x = pr.baseX + -pr.dz * off; // right normal = (-dz, dx)
+      const z = pr.baseZ + pr.dx * off;
+      // On a sharp inside curve the right edge of one segment can fall onto the
+      // route elsewhere and engulf the camera. If this facade lands within the
+      // walkway of *any* part of the route, drop it (a gap beats an occlusion).
+      if (project([x, z]).dist < 6) continue;
+      const facade: Facade = { s: pr.s, x, z, angle: Math.atan2(pr.dz, -pr.dx), w, h, kind };
+      if (name) facade.name = name;
+      facades.push(facade);
+    }
+    facades.sort((a, b) => a.s - b.s);
+    // Cap for perf, keeping an even spread along the route.
+    const MAX = 170;
+    const step = Math.max(1, Math.floor(facades.length / MAX));
+    const chosen = facades.filter((_, i) => i % step === 0).slice(0, MAX);
+
+    const byStyle = new Map<FacadeStyle, BufferGeometry[]>();
+    let signs = 0;
+    for (const f of chosen) {
+      const style = STYLE_FOR_TYPE[f.kind] ?? FACADE_FOR_KIND[f.kind] ?? 'residential';
+      const color = TYPE_COLOR[f.kind] ?? TYPE_COLOR.residential!;
+      const geo = facadeQuad(f.w, f.h);
+      geo.rotateY(f.angle);
+      geo.translate(f.x, 0, f.z);
+      paintGeometry(geo, color);
+      let list = byStyle.get(style);
+      if (!list) byStyle.set(style, (list = []));
+      list.push(geo);
+      if (f.name && signs < 36) {
+        const big = f.h > 8 || f.kind === 'hospital' || f.kind === 'school' || f.kind === 'landmark';
+        const sign = makeSignboard(f.name, signs, big);
+        sign.position.set(f.x, Math.min(f.h - 0.6, 3.0), f.z);
+        sign.rotation.y = f.angle;
+        sign.position.y += 0.001;
+        this.group.add(sign);
+        signs++;
+      }
+    }
+    for (const [style, geos] of byStyle) {
+      const merged = mergeGeometries(geos, false);
+      // Unlit flat panels: bright type color × facade texture, cartoon-clean
+      // and never shadowed dark regardless of which way the wall faces.
+      this.group.add(
+        new Mesh(
+          merged,
+          new MeshBasicMaterial({ map: facadeTexture(style), vertexColors: true, side: DoubleSide }),
+        ),
+      );
     }
   }
 
@@ -522,64 +607,6 @@ function ribbon(pts: Vec2[], width: number, y: number, color: Color): BufferGeom
 
 const STOREY_M = 3.0; // texture tile = one storey
 const BAY_M = 9.6; // tile width = 3 bays ≈ 3.2 m each
-
-function extrudeFootprint(fp: Vec2[], height: number): { walls: BufferGeometry; roof: BufferGeometry } {
-  // Walls with facade UVs: u tiles along each wall's length, v by storey.
-  const verts: number[] = [];
-  const uvs: number[] = [];
-  const idx: number[] = [];
-  for (let i = 0; i < fp.length; i++) {
-    const a = fp[i]!;
-    const b = fp[(i + 1) % fp.length]!;
-    const base = verts.length / 3;
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    const u = len / BAY_M;
-    const v = height / STOREY_M;
-    verts.push(a[0], 0, a[1], b[0], 0, b[1], b[0], height, b[1], a[0], height, a[1]);
-    uvs.push(0, 0, u, 0, u, v, 0, v);
-    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-  }
-  const walls = new BufferGeometry();
-  walls.setAttribute('position', new BufferAttribute(new Float32Array(verts), 3));
-  walls.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
-  walls.setIndex(idx);
-
-  // Roof via earcut (Shape uses XY; map z → -y then rotate).
-  const shape = new Shape();
-  shape.moveTo(fp[0]![0], -fp[0]![1]);
-  for (let i = 1; i < fp.length; i++) shape.lineTo(fp[i]![0], -fp[i]![1]);
-  const roof = new ShapeGeometry(shape);
-  roof.rotateX(-Math.PI / 2);
-  roof.translate(0, height, 0);
-  // Attribute sets must match exactly within each merge group.
-  roof.deleteAttribute('uv');
-  roof.deleteAttribute('normal');
-
-  return { walls: walls.toNonIndexed(), roof: roof.toNonIndexed() };
-}
-
-/** Distance + local direction of the closest route segment to a point. */
-function nearestOnRoute(p: Vec2, pts: Vec2[]): { dist: number; dirX: number; dirZ: number } {
-  let best = { dist: Infinity, dirX: 0, dirZ: 1 };
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1]!;
-    const b = pts[i]!;
-    const dx = b[0] - a[0];
-    const dz = b[1] - a[1];
-    const lenSq = dx * dx + dz * dz;
-    if (lenSq < 0.01) continue;
-    let f = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / lenSq;
-    f = Math.max(0, Math.min(1, f));
-    const px = a[0] + f * dx - p[0];
-    const pz = a[1] + f * dz - p[1];
-    const d = Math.hypot(px, pz);
-    if (d < best.dist) {
-      const len = Math.sqrt(lenSq);
-      best = { dist: d, dirX: dx / len, dirZ: dz / len };
-    }
-  }
-  return best;
-}
 
 function paintGeometry(geo: BufferGeometry, color: Color): void {
   const count = geo.getAttribute('position').count;

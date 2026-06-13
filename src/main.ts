@@ -22,7 +22,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 app.appendChild(renderer.domElement);
 
-const camera = new PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 600);
+const camera = new PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 600);
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();

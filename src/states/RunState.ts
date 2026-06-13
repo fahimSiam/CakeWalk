@@ -40,6 +40,7 @@ import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
 import { RestMarker } from '@/gfx/RestMarker';
 import { CrossingMinigame } from '@/ui/CrossingMinigame';
+import { bendObject, makeBendUniforms, type BendUniforms } from '@/gfx/worldBend';
 import {
   OUTFIT_COLORS,
   localDateKey,
@@ -136,6 +137,7 @@ export class RunState implements GameState {
   private camLook = { x: 0, z: 0 };
   private restMarker!: RestMarker;
   private crossingGame = new CrossingMinigame();
+  private bendUniforms: BendUniforms = makeBendUniforms();
 
   constructor(private ctx: GameContext) {}
 
@@ -277,12 +279,16 @@ export class RunState implements GameState {
     );
     this.setupGhost(p);
     this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor);
-    this.trafficRenderer = new TrafficRenderer(this.scene, this.traffic, this.corridor);
+    this.trafficRenderer = new TrafficRenderer(this.scene, this.traffic, this.corridor, this.bendUniforms);
     this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor);
     this.restMarker = new RestMarker(this.scene);
     this.hud = new Hud(this.ctx.input);
     this.phoneOverlay = new PhoneOverlay();
     this.rewindFx = new RewindFx(this.ctx.renderer.domElement);
+
+    // Curved-world bend: straight under the player, road falls away in the
+    // distance. Patches every mesh material now that the scene is fully built.
+    bendObject(this.scene, this.bendUniforms);
 
     // Mission/summary counters.
     this.bus.on('restStarted', (e) => {
@@ -402,9 +408,12 @@ export class RunState implements GameState {
     return zones.filter((z, i) => i === 0 || z.s - zones[i - 1]!.s > 25);
   }
 
-  /** The right-side lateral band (t) where a seated rest spot is reachable. */
+  /** Reachable lateral bands for rest spots: right side, and the left edge of
+   *  the footpath (kept off the road, which starts near t = -3.4). */
   private static readonly REST_T_MIN = 2.2;
   private static readonly REST_T_MAX = 6.0;
+  private static readonly REST_T_LEFT_MIN = 2.0;
+  private static readonly REST_T_LEFT_MAX = 3.0;
 
   /** Cha dokans, bus stops & fruit trees near the walking line. */
   private buildRoutePoints(): RoutePoint[] {
@@ -420,8 +429,6 @@ export class RunState implements GameState {
         corridor.toWorld(s, 0, pose);
         const dx = poi.pos[0] - pose.x;
         const dz = poi.pos[1] - pose.z;
-        // Lateral offset = projection on the path normal. The LEFT (t<0) is the
-        // traffic road; rest spots live on the right (t>0).
         const t = dx * -pose.dirZ + dz * pose.dirX;
         if (poi.kind === 'tree') {
           // Trees keep their real position (the fruit-grab must line up with the
@@ -429,11 +436,11 @@ export class RunState implements GameState {
           if (dx * dx + dz * dz > 12 * 12 || t < -2) continue;
           points.push({ kind: 'tree', s, t, fruit: true });
         } else {
-          // Rest stalls are snapped into the reachable right-side band, and the
-          // stall is rendered there too, so what you see is what you can sit at.
+          // Rest stalls snap into a reachable band on the POI's real side — the
+          // right footpath, or the left edge (off the road) — and are rendered
+          // there too, so what you see is what you can sit at.
           if (dx * dx + dz * dz > 22 * 22) continue;
-          const ct = Math.max(RunState.REST_T_MIN, Math.min(RunState.REST_T_MAX, Math.abs(t)));
-          points.push({ kind: poi.kind, s, t: ct, fruit: false });
+          points.push({ kind: poi.kind, s, t: RunState.snapRestT(t), fruit: false });
         }
       }
       this.fillRestGaps(points);
@@ -448,23 +455,36 @@ export class RunState implements GameState {
     return points.sort((a, b) => a.s - b.s);
   }
 
+  /** Clamp a stall's lateral offset into the reachable band on its own side. */
+  private static snapRestT(t: number): number {
+    return t >= 0
+      ? Math.max(RunState.REST_T_MIN, Math.min(RunState.REST_T_MAX, t))
+      : -Math.max(RunState.REST_T_LEFT_MIN, Math.min(RunState.REST_T_LEFT_MAX, -t));
+  }
+
   /**
    * Guarantees the player always meets seatable rest spots: where the gap
    * between consecutive cha dokans / bus stops exceeds ~170 m, drop a
-   * synthesized cha dokan in the middle (deterministic, on the right side).
+   * synthesized cha dokan in the middle — alternating sides so seating appears
+   * on both the right footpath and the left edge.
    */
   private fillRestGaps(points: RoutePoint[]): void {
     const MAX_GAP = 170;
     const rests = points.filter((p) => p.kind !== 'tree').sort((a, b) => a.s - b.s);
     const marks: number[] = [20, ...rests.map((r) => r.s), this.runLength - 20];
     const rng = this.rng.stream('rest-fill');
+    let n = points.length;
     for (let i = 1; i < marks.length; i++) {
       let gap = marks[i]! - marks[i - 1]!;
       let at = marks[i - 1]!;
       while (gap > MAX_GAP) {
         at += MAX_GAP * (0.6 + rng.range(0, 0.3));
         if (at > this.runLength - 25) break;
-        points.push({ kind: 'chaDokan', s: at, t: RunState.REST_T_MIN + rng.range(0, 1.4), fruit: false });
+        const left = n++ % 2 === 1;
+        const t = left
+          ? -(RunState.REST_T_LEFT_MIN + rng.range(0, 0.8))
+          : RunState.REST_T_MIN + rng.range(0, 1.4);
+        points.push({ kind: 'chaDokan', s: at, t, fruit: false });
         gap = marks[i]! - at;
       }
     }
@@ -478,9 +498,10 @@ export class RunState implements GameState {
     for (const p of this.interactions.points) {
       if (p.kind === 'tree') continue;
       this.corridor.toWorld(p.s, p.t, pose);
-      // Bench faces the street (toward -t, the left/road side): local +Z maps
-      // to the left normal (dirZ, -dirX).
-      const angle = Math.atan2(pose.dirZ, -pose.dirX);
+      // Bench faces back toward the walkway centerline from whichever side it
+      // sits on. Right normal = (-dirZ, dirX); the bench faces -sign×normal.
+      const sign = p.t >= 0 ? 1 : -1;
+      const angle = Math.atan2(sign * pose.dirZ, -sign * pose.dirX);
       stalls.push({ kind: p.kind, x: pose.x, z: pose.z, angle });
     }
     return stalls;
