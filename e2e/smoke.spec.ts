@@ -17,6 +17,28 @@ test('graybox run boots without console errors and renders frames', async ({ pag
   expect(errors).toEqual([]);
 });
 
+test('the unified Quaternius cast (player + crowd) streams in as skinned GLBs', async ({ page }) => {
+  await page.goto('/?debug=1&seed=7&graybox=1');
+  await page.waitForFunction(() => window.__cakewalk?.ready === true);
+  await page.waitForFunction(() => window.__cakewalk.ctx.machine.activeName === 'run');
+  // Player + crowd are all animated GLB people loaded async; wait until a batch
+  // of skinned meshes appears in-scene (proves the crowd pool bound, not just
+  // the single-mesh player).
+  await page.waitForFunction(
+    () => {
+      const cur = (window.__cakewalk.ctx.machine as unknown as { current: { scene?: unknown } })
+        .current;
+      const scene = (cur as { scene?: { traverse(cb: (o: { type: string }) => void): void } }).scene;
+      let n = 0;
+      scene?.traverse((o) => {
+        if (o.type === 'SkinnedMesh') n++;
+      });
+      return n >= 6;
+    },
+    { timeout: 10000 },
+  );
+});
+
 test('route select previews turn landmarks and swipes between routes', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));

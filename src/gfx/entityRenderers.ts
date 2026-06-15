@@ -30,6 +30,34 @@ import { StreetLife, MAX_COWS, CowState } from '@/world/StreetLife';
 import type { Corridor, PathPose } from '@/world/Corridor';
 import { applyWorldBend, type BendUniforms } from './worldBend';
 
+/**
+ * Replace an instanced creature's procedural geometry with a real Quaternius
+ * GLB (flattened to one vertex-coloured mesh so it stays instanced), uniformly
+ * scaled to `targetHeight` and rotated so its +Z forward matches the
+ * procedural +X convention. Async; the placeholder shows until it loads.
+ */
+function swapAnimalGlb(
+  mesh: InstancedMesh,
+  name: string,
+  targetHeight: number,
+  flatColors: boolean,
+  bend?: BendUniforms,
+): void {
+  void loadVehicleModel(name, flatColors).then((model) => {
+    if (!model) return;
+    const geo = model.geometry.clone();
+    const s = targetHeight / model.sy;
+    geo.scale(s, s, s);
+    geo.rotateY(-Math.PI / 2); // +Z forward → +X to match procedural creatures
+    // Clone the cached material so bend + dispose never touch the shared source.
+    const mat = (model.material as MeshLambertMaterial).clone();
+    if (bend) applyWorldBend(mat, bend);
+    mesh.geometry.dispose();
+    mesh.geometry = geo;
+    mesh.material = mat;
+  });
+}
+
 /** Translated BoxGeometry shorthand for assembling little creatures. */
 function box(w: number, h: number, d: number, x: number, y: number, z: number): BoxGeometry {
   const g = new BoxGeometry(w, h, d);
@@ -149,16 +177,27 @@ export class TrafficRenderer {
       this.kindMeshes[ki] = mesh;
       this.kindScale[ki] = scale;
 
-      // Hero models: Kenney truck for the bus, motorcycle for the bike (MIT).
+      // Real models: Kenney truck/bike (single-texture) for bus/bike; Poly
+      // Pizza Quaternius cars (flat multi-material → vertex-coloured) for cars.
+      const CAR_GLB: Record<string, string> = {
+        car: 'cars/car-1',
+        taxi: 'cars/taxi',
+        suv: 'cars/suv',
+      };
       const modelName =
-        kind.id === 'bus' ? 'vehicle-truck-red' : kind.id === 'bike' ? 'vehicle-motorcycle' : null;
+        kind.id === 'bus' ? 'vehicle-truck-red'
+        : kind.id === 'bike' ? 'vehicle-motorcycle'
+        : (CAR_GLB[kind.id] ?? null);
+      const flatColors = kind.id in CAR_GLB;
       if (modelName) {
-        void loadVehicleModel(modelName).then((model) => {
+        void loadVehicleModel(modelName, flatColors).then((model) => {
           if (!model || this.disposed) return;
           mesh.geometry.dispose();
           (mesh.material as MeshLambertMaterial).dispose();
-          mesh.geometry = model.geometry;
-          mesh.material = model.material as MeshLambertMaterial;
+          // Clone the cached geometry + material so this renderer's dispose()
+          // and per-run world-bend never free/mutate the shared cached source.
+          mesh.geometry = model.geometry.clone();
+          mesh.material = (model.material as MeshLambertMaterial).clone();
           if (this.bend) applyWorldBend(mesh.material, this.bend);
           // Non-uniform: real width/height/length so the truck isn't a cube.
           this.kindScale[ki] = new Vector3(
@@ -213,7 +252,12 @@ export class StreetLifeRenderer {
   private dummy = new Object3D();
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
 
-  constructor(scene: Scene, private life: StreetLife, private corridor: Corridor) {
+  constructor(
+    scene: Scene,
+    private life: StreetLife,
+    private corridor: Corridor,
+    private bend?: BendUniforms,
+  ) {
     // Low-poly Qurbani cow: pale body + brown head, horns, ears, festive
     // garland collar (cattle are decorated for Eid-ul-Adha) and a tail.
     const cowBody = new BoxGeometry(1.0, 0.85, 1.9);
@@ -293,6 +337,13 @@ export class StreetLifeRenderer {
       m.frustumCulled = false;
       scene.add(m);
     }
+
+    // Swap the procedural placeholders for real Quaternius animal GLBs (kept
+    // instanced via the flatten-to-vertex-colours loader). The model's +Z
+    // forward is rotated to +X to match the procedural convention.
+    swapAnimalGlb(this.dogMesh, 'animals/dog', 0.6, false, this.bend); // single texture
+    swapAnimalGlb(this.catMesh, 'animals/cat', 0.35, false, this.bend); // single texture
+    swapAnimalGlb(this.cowMesh, 'animals/cow', 1.5, true, this.bend); // 7 flat colours
   }
 
   render(): void {

@@ -32,6 +32,10 @@ export const VEHICLE_KINDS: VehicleKind[] = [
   { id: 'cng', speedMin: 12, speedMax: 17, length: 2.6, width: 1.4, color: '#3a7d4f', height: 1.7 },
   { id: 'rickshaw', speedMin: 6, speedMax: 9, length: 2.2, width: 1.1, color: '#4a5fb0', height: 1.8 },
   { id: 'bike', speedMin: 16, speedMax: 21, length: 1.9, width: 0.8, color: '#333', height: 1.4 },
+  // Cars (Poly Pizza GLBs) — realistic proportions so nothing looks oversized.
+  { id: 'car', speedMin: 13, speedMax: 18, length: 4.3, width: 1.8, color: '#d23a3a', height: 1.5 },
+  { id: 'taxi', speedMin: 12, speedMax: 17, length: 4.4, width: 1.85, color: '#f4c20d', height: 1.5 },
+  { id: 'suv', speedMin: 13, speedMax: 18, length: 4.7, width: 1.95, color: '#3a6ea5', height: 1.7 },
 ];
 
 /** Road lanes left of the footpath (negative t), nearest first. */
@@ -170,7 +174,10 @@ export class TrafficSystem {
     if (active < want && this.rng.chance(dt * 2.4)) {
       for (let i = 0; i < MAX_VEHICLES; i++) {
         if (this.vActive[i]) continue;
-        const kindIdx = this.rng.weighted([0, 1, 2, 3], [2, 3, 2, 3]);
+        const kindIdx = this.rng.weighted(
+          [0, 1, 2, 3, 4, 5, 6],
+          [2, 3, 2, 2, 3, 2, 2],
+        );
         const kind = VEHICLE_KINDS[kindIdx]!;
         this.vActive[i] = 1;
         this.vKind[i] = kindIdx;

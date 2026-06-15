@@ -1,0 +1,26 @@
+3D assets in this folder — licenses & sources
+=============================================
+
+All models below are CC0 1.0 Universal (public domain): free for personal and
+commercial use, no attribution required. Attribution kept here as a courtesy.
+Fetched via tools/assets/fetch.mjs.
+
+characters/  — Quaternius "Animated Humans"  (https://poly.pizza/u/Quaternius)
+  man, man-suit, woman, woman-casual, woman-dress
+  One shared "HumanArmature" rig; flat untextured (tintable) materials; clips
+  include Idle / Walk / Run / Jump / Sitting. Used for the player AND the crowd
+  so the whole cast is one cohesive art style.
+
+cars/        — "Cars Bundle" by Quaternius (https://poly.pizza/bundle/Cars-Bundle-FE5IWe6OMk)
+  car-1, car-2, suv, taxi, police, sports-1, sports-2
+
+animals/     — Quaternius (https://poly.pizza/u/Quaternius)
+  cow, cat, dog
+
+nature/      — Quaternius (https://poly.pizza/u/Quaternius)
+  tree-1, palm, bush
+
+street/      — Quaternius (https://poly.pizza/u/Quaternius)
+  street-straight, street-light
+
+vehicle-*.glb / Textures/ — Kenney "Car Kit" (MIT), see LICENSE-kenney.txt

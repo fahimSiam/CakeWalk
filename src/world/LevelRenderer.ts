@@ -29,6 +29,8 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { BakedArea, BakedPoi, Vec2 } from './levelTypes';
 import { buildRickshawGeometry, paintColored } from '@/gfx/meshFactory';
+import { loadPropModel } from '@/gfx/models';
+import { bendObject, type BendUniforms } from '@/gfx/worldBend';
 import {
   FACADE_FOR_KIND,
   facadeTexture,
@@ -94,7 +96,13 @@ export class LevelRenderer {
   readonly props: PlacedProp[] = [];
   readonly routeRef: Vec2[];
 
-  constructor(scene: Scene, area: BakedArea, routePts: Vec2[], restStalls: RestStall[] = []) {
+  constructor(
+    scene: Scene,
+    area: BakedArea,
+    routePts: Vec2[],
+    restStalls: RestStall[] = [],
+    private bend?: BendUniforms,
+  ) {
     this.routeRef = routePts;
     const near = makeRouteDistance(routePts);
 
@@ -159,16 +167,16 @@ export class LevelRenderer {
   }
 
   private addRouteRibbon(routePts: Vec2[]): void {
-    // Footpath the player walks: dark grout base + vibrant candy tile rows on
-    // top (Fall-Guys / Crossy-Roads vibe), so the floor itself reads colorful.
-    const grout = ribbon(routePts, 7.8, 0.022, new Color('#5b4c3a'));
-    if (grout) this.group.add(new Mesh(grout, new MeshLambertMaterial({ vertexColors: true })));
-    this.addTiledFootpath(routePts);
+    // Footpath: 4 calm solid colour lanes running the whole length (simple long
+    // blocks, not busy tiles), over a thin curb base.
+    const base = ribbon(routePts, 8.0, 0.018, new Color('#6f6552'));
+    if (base) this.group.add(new Mesh(base, new MeshLambertMaterial({ vertexColors: true })));
+    this.addLaneFootpath(routePts);
 
-    // The traffic road runs on the LEFT of the footpath: dark ribbon with
-    // dashed lane lines — the oncoming vehicle stream lives here.
-    const roadCenter = offsetPolyline(routePts, -6.9);
-    const road = ribbon(roadCenter, 7.0, 0.02, new Color('#3c4750'));
+    // The traffic road runs on the LEFT of the footpath: one simple, solid,
+    // continuous asphalt strip (always rendered) with a dashed centre line.
+    const roadCenter = offsetPolyline(routePts, -7.4);
+    const road = ribbon(roadCenter, 8.0, 0.01, new Color('#41474d'));
     if (road) this.group.add(new Mesh(road, new MeshLambertMaterial({ vertexColors: true })));
     const dashGeo = new BoxGeometry(0.18, 0.02, 2.2);
     const dashes: { pos: Vec2; angle: number }[] = [];
@@ -194,21 +202,17 @@ export class LevelRenderer {
   }
 
   /**
-   * Lays a grid of vibrant inset tiles along the footpath — 4 colored columns
-   * across the width, the palette stepping per row+column so it reads as a
-   * checkered candy walkway with dark grout showing between tiles.
+   * The footpath as 4 solid colour lanes running the full length of the route —
+   * simple long blocks (one colour each), a calm "Crossy-Road lanes" look
+   * rather than the previous busy candy checker.
    */
-  private addTiledFootpath(routePts: Vec2[]): void {
-    const PALETTE = ['#f6c75b', '#5fd6c0', '#f58fb4', '#9fb8ff', '#b6e07a', '#ffa473'].map(
-      (c) => new Color(c),
-    );
-    const WIDTH = 7.0;
-    const COLS = 4;
-    const STEP = 1.55;
-    const INSET = 0.07; // shrink each tile to expose grout
+  private addLaneFootpath(routePts: Vec2[]): void {
+    const LANES = ['#d9c79f', '#c2b083', '#cbbd96', '#a89a78'].map((c) => new Color(c));
+    const WIDTH = 7.4;
+    const COLS = LANES.length;
     const half = WIDTH / 2;
     const samples: { p: Vec2; n: Vec2 }[] = [];
-    walkAlong(routePts, STEP, 0, (pos, normal) => samples.push({ p: pos, n: normal }));
+    walkAlong(routePts, 3.0, 0, (pos, normal) => samples.push({ p: pos, n: normal }));
     if (samples.length < 2) return;
 
     const verts: number[] = [];
@@ -223,21 +227,17 @@ export class LevelRenderer {
       const a = samples[r]!;
       const b = samples[r + 1]!;
       for (let c = 0; c < COLS; c++) {
-        const t0 = -half + (c / COLS) * WIDTH + INSET;
-        const t1 = -half + ((c + 1) / COLS) * WIDTH - INSET;
-        // Inset along the path too by sampling slightly inward (via lerp).
-        const a0 = pt(a, t0);
-        const a1 = pt(a, t1);
-        const b0 = pt(b, t0);
-        const b1 = pt(b, t1);
-        const col = PALETTE[(r + c) % PALETTE.length]!;
-        const base = vi;
-        for (const [x, z] of [a0, a1, b1, b0]) {
-          verts.push(x, 0.035, z);
+        const t0 = -half + (c / COLS) * WIDTH;
+        const t1 = -half + ((c + 1) / COLS) * WIDTH;
+        const quad = [pt(a, t0), pt(a, t1), pt(b, t1), pt(b, t0)];
+        const col = LANES[c]!; // colour by lane only → long solid stripes
+        const baseI = vi;
+        for (const [x, z] of quad) {
+          verts.push(x, 0.03, z);
           colors.push(col.r, col.g, col.b);
           vi++;
         }
-        idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        idx.push(baseI, baseI + 1, baseI + 2, baseI, baseI + 2, baseI + 3);
       }
     }
     const geo = new BufferGeometry();
@@ -453,8 +453,8 @@ export class LevelRenderer {
       }
     }
 
-    const instanced = (positions: Vec2[], geo: BufferGeometry, ry = 0): void => {
-      if (!positions.length) return;
+    const instanced = (positions: Vec2[], geo: BufferGeometry, ry = 0): InstancedMesh | null => {
+      if (!positions.length) return null;
       const mesh = new InstancedMesh(
         geo,
         new MeshLambertMaterial({ vertexColors: true, flatShading: true }),
@@ -468,12 +468,45 @@ export class LevelRenderer {
         mesh.setMatrixAt(i, m);
       });
       this.group.add(mesh);
+      return mesh;
     };
 
     // Cha dokans & bus stops are rendered by addRestStalls at reachable spots.
-    instanced(byKind.get('tree') ?? [], treeGeometry());
+    // Roadside trees: real Quaternius tree GLBs (textured, multi-material), so
+    // they're cloned at a capped set of nearest positions rather than instanced.
+    this.addTreeClones(byKind.get('tree') ?? []);
     instanced(byKind.get('dustbin') ?? [], dustbinGeometry());
     this.addStreetClutter(this.routeRef);
+  }
+
+  /**
+   * Place real Quaternius tree GLBs (textured, two materials so they can't be
+   * merge-instanced) by cloning the model at a capped set of the positions
+   * nearest the route — enough to line the street without a poly blow-up.
+   */
+  private addTreeClones(positions: Vec2[]): void {
+    if (!positions.length) return;
+    const CAP = 22;
+    // Pick the positions closest to the route centre so the visible street is
+    // populated; rendering every roadside POI would be hundreds of trees.
+    const d = (p: Vec2): number => {
+      let m = Infinity;
+      for (const r of this.routeRef) m = Math.min(m, (r[0] - p[0]) ** 2 + (r[1] - p[1]) ** 2);
+      return m;
+    };
+    const sorted = [...positions].sort((a, b) => d(a) - d(b));
+    const chosen = sorted.slice(0, CAP);
+    void loadPropModel('nature/tree-1').then((model) => {
+      if (!model) return;
+      for (const p of chosen) {
+        const tree = model.spawn(5.0);
+        tree.position.x = p[0];
+        tree.position.z = p[1];
+        tree.rotation.y = (p[0] * 7 + p[1] * 13) % 6;
+        if (this.bend) bendObject(tree, this.bend);
+        this.group.add(tree);
+      }
+    });
   }
 
   /**
@@ -629,16 +662,6 @@ function centroid(pts: Vec2[]): Vec2 {
     z += p[1];
   }
   return [x / pts.length, z / pts.length];
-}
-
-function treeGeometry(): BufferGeometry {
-  const trunk = new CylinderGeometry(0.12, 0.18, 1.6, 5);
-  trunk.translate(0, 0.8, 0);
-  const trunkG = paintColored(trunk, new Color('#6e4f2f'));
-  const crown = new CylinderGeometry(0.1, 1.5, 2.6, 6);
-  crown.translate(0, 3.0, 0);
-  const crownG = paintColored(crown, new Color('#5f8f4a'));
-  return mergeGeometries([trunkG, crownG], false);
 }
 
 function dustbinGeometry(): BufferGeometry {

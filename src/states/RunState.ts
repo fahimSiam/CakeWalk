@@ -26,7 +26,7 @@ import { Rng } from '@/core/Rng';
 import { StraightCorridor, type Corridor, type PathPose } from '@/world/Corridor';
 import { Player, HEALTH_MAX } from '@/player/Player';
 import { CrowdSystem } from '@/crowd/CrowdSystem';
-import { CrowdRenderer } from '@/crowd/CrowdRenderer';
+import { CrowdActors } from '@/gfx/CrowdActors';
 import { RunScore } from '@/economy/RunScore';
 import { Hud } from '@/ui/Hud';
 import { PickpocketSystem } from '@/pickpocket/PickpocketSystem';
@@ -112,7 +112,7 @@ export class RunState implements GameState {
   private projector: SplineCorridor | null = null;
   private player!: Player;
   private crowd!: CrowdSystem;
-  private crowdRenderer!: CrowdRenderer;
+  private crowdActors!: CrowdActors;
   private score!: RunScore;
   private hud!: Hud;
   private avatar!: PlayerAvatar;
@@ -316,15 +316,16 @@ export class RunState implements GameState {
 
     this.buildScene();
     this.crowd.prewarm(this.player.s);
-    this.crowdRenderer = new CrowdRenderer(this.scene, this.crowd, this.corridor);
+    this.crowdActors = new CrowdActors(this.scene, this.crowd, this.corridor, 26, this.bendUniforms);
     this.avatar = new PlayerAvatar(
       this.scene,
       OUTFIT_COLORS[save.equippedOutfit] ?? OUTFIT_COLORS.default,
+      this.bendUniforms,
     );
     this.setupGhost(p);
     this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor);
     this.trafficRenderer = new TrafficRenderer(this.scene, this.traffic, this.corridor, this.bendUniforms);
-    this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor);
+    this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor, this.bendUniforms);
     this.restMarker = new RestMarker(this.scene);
     this.hud = new Hud(this.ctx.input);
     this.phoneOverlay = new PhoneOverlay();
@@ -661,7 +662,7 @@ export class RunState implements GameState {
     this.phoneOverlay.dispose();
     this.rewindFx.dispose();
     this.avatar.dispose(this.scene);
-    this.crowdRenderer.dispose(this.scene);
+    this.crowdActors.dispose();
     this.pmRenderer.dispose(this.scene);
     this.trafficRenderer.dispose(this.scene);
     this.lifeRenderer.dispose(this.scene);
@@ -919,7 +920,9 @@ export class RunState implements GameState {
     }
     cam.lookAt(this.camLook.x, 1.1, this.camLook.z);
 
-    this.crowdRenderer.render();
+    // Crowd = animated Quaternius people (same art style as the player), pooled
+    // onto the agents nearest the camera.
+    this.crowdActors.update(this.player.s, frameDt);
     this.pmRenderer.render();
     this.trafficRenderer.render();
     this.lifeRenderer.render();
@@ -1059,6 +1062,7 @@ export class RunState implements GameState {
         straightenArea(this.params.area, this.projector),
         straightRoute(this.params.route.pts, this.projector),
         this.buildRestStalls(),
+        this.bendUniforms,
       );
       const end: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
       this.corridor.toWorld(this.runLength, 0, end);
