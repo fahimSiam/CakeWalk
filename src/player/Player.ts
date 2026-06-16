@@ -145,6 +145,10 @@ export class Player {
   }
 
   applyBump(severity: number): boolean {
+    // Safe while resting (seated at a cha dokan / bus stop): the crowd, traffic
+    // and animals flow past without hurting you. Only pocketmars can still
+    // approach a seated player — theft goes through a separate path, not here.
+    if (this.resting) return false;
     if (this.bumpCooldown > 0) return false;
     this.bumpCooldown = 0.6;
     this.health = Math.max(0, this.health - severity);

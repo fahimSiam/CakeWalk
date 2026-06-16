@@ -234,3 +234,8 @@
 - [x] **Crossing minigame is now 6 lanes** (fixed) — a proper Crossy-Road crossing; difficulty still drives car speed/density.
 - [x] Reviewer pass (no blockers); fixed the async-dispose race in both actor pools + a stale comment. 82 unit + 11 e2e green; screenshots verified flat road, soft buildings, 6-lane crossing, and per-option distances.
 - **2026-06-16**: M21 — cohesion/polish pass on top of the M20 asset overhaul.
+
+## M22 — Seated = safe (no bump damage while resting) ✅
+- [x] While resting at a cha dokan / bus stop, `Player.applyBump` returns false — the crowd, traffic, dogs/cats and even a stampede flow past without hurting a seated player. Pocketmars can still approach and steal (theft is a separate `score.steal` path, not `applyBump`), so resting stays risky in the way the design intends.
+- [x] 83 unit (+1: no bump damage while resting; vulnerable again on standing) + 11 e2e green.
+- **2026-06-16**: M22 — small gameplay fix per feedback.

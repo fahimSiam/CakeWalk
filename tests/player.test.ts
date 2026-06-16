@@ -85,6 +85,17 @@ describe('Player', () => {
     expect(p.health).toBe(90);
   });
 
+  it('takes no bump damage while resting (seated is safe)', () => {
+    const p = new Player();
+    p.resting = true;
+    expect(p.applyBump(40)).toBe(false);
+    expect(p.health).toBe(100);
+    // Standing up makes you vulnerable again.
+    p.resting = false;
+    expect(p.applyBump(40)).toBe(true);
+    expect(p.health).toBe(60);
+  });
+
   it('resting recovers stamina and stops movement', () => {
     const p = new Player();
     p.stamina = 10;
