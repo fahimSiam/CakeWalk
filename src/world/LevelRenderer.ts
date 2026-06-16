@@ -56,6 +56,15 @@ const TYPE_COLOR: Record<string, Color> = {
   residential: new Color('#d6a98f'),
 };
 
+// Most OSM buildings are generic "residential"/"commercial" — give those a
+// varied (but cohesive, mid-saturation) palette so the street reads colourful
+// and lively instead of one flat tan wall. Distinctive types keep TYPE_COLOR.
+const VARIED_KINDS = new Set(['residential', 'commercial', 'house', 'apartments', 'yes', '']);
+const BUILDING_PALETTE = [
+  '#d98c6a', '#e0b65c', '#7fb09a', '#6f9cc0', '#d3a59c',
+  '#cbb277', '#9a8fb5', '#86b0a6', '#e0a978', '#b8b06a',
+].map((c) => new Color(c));
+
 // Facade texture style per enriched POI type (building kinds use FACADE_FOR_KIND).
 const STYLE_FOR_TYPE: Record<string, FacadeStyle> = {
   hospital: 'commercial',
@@ -145,7 +154,9 @@ export class LevelRenderer {
         for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
           // Material.dispose() does NOT free its textures — the signboards
           // (building names + junction warnings) each own a CanvasTexture map.
-          (m as MeshBasicMaterial).map?.dispose();
+          // Skip module-cached singletons (facade window textures), which the
+          // cache owns and reuses across runs.
+          if (!m.userData.sharedMap) (m as MeshBasicMaterial).map?.dispose();
           m.dispose();
         }
       }
@@ -462,6 +473,9 @@ export class LevelRenderer {
       x: number;
       z: number;
       angle: number;
+      /** Street tangent at this building (for extruding the 3D block). */
+      tx: number;
+      tz: number;
       w: number;
       h: number;
       kind: string;
@@ -483,7 +497,9 @@ export class LevelRenderer {
         maxz = Math.max(maxz, v[1]);
       }
       const w = Math.max(4, Math.min(15, Math.max(maxx - minx, maxz - minz)));
-      const h = Math.max(3.2, Math.min(9, b.height));
+      // Varied skyline: real OSM height, widened range, with a deterministic
+      // per-building bump so a row of buildings isn't a flat wall.
+      const h = Math.max(4, Math.min(15, b.height + ((Math.abs(c[0]) * 3 + Math.abs(c[1]) * 7) % 6)));
       let kind: string = b.kind;
       let name = b.name;
       // Adopt a nearby named POI's type/name (so hospitals/schools/shops show).
@@ -503,7 +519,17 @@ export class LevelRenderer {
       // route elsewhere and engulf the camera. If this facade lands within the
       // walkway of *any* part of the route, drop it (a gap beats an occlusion).
       if (project([x, z]).dist < 6) continue;
-      const facade: Facade = { s: pr.s, x, z, angle: Math.atan2(pr.dz, -pr.dx), w, h, kind };
+      const facade: Facade = {
+        s: pr.s,
+        x,
+        z,
+        angle: Math.atan2(pr.dz, -pr.dx),
+        tx: pr.dx,
+        tz: pr.dz,
+        w,
+        h,
+        kind,
+      };
       if (name) facade.name = name;
       facades.push(facade);
     }
@@ -514,38 +540,74 @@ export class LevelRenderer {
     const chosen = facades.filter((_, i) => i % step === 0).slice(0, MAX);
 
     const byStyle = new Map<FacadeStyle, BufferGeometry[]>();
+    const details: BufferGeometry[] = []; // roofs + water tanks (one plain mesh)
     let signs = 0;
     for (const f of chosen) {
       const style = STYLE_FOR_TYPE[f.kind] ?? FACADE_FOR_KIND[f.kind] ?? 'residential';
-      const color = TYPE_COLOR[f.kind] ?? TYPE_COLOR.residential!;
-      const geo = facadeQuad(f.w, f.h);
-      geo.rotateY(f.angle);
-      geo.translate(f.x, 0, f.z);
-      paintGeometry(geo, color);
-      let list = byStyle.get(style);
-      if (!list) byStyle.set(style, (list = []));
-      list.push(geo);
-      // Name on a board standing at the footpath's right edge, IN FRONT of the
-      // wall (not coplanar with it) and facing the oncoming player so it reads
-      // clearly while walking. The straight corridor runs down -Z, so the
-      // player approaches from +Z → the sign faces +Z (rotation.y = 0).
+      // Distinctive building types keep their signature colour; the generic bulk
+      // gets a varied palette colour so the street isn't one flat tone.
+      const hsh = (((Math.sin(f.s * 12.9898) * 43758.5453) % 1) + 1) % 1;
+      const idx = Math.floor(hsh * BUILDING_PALETTE.length) % BUILDING_PALETTE.length;
+      const base = VARIED_KINDS.has(f.kind)
+        ? BUILDING_PALETTE[idx]!
+        : TYPE_COLOR[f.kind] ?? BUILDING_PALETTE[idx]!;
+      const color = base.clone().multiplyScalar(0.9 + hsh * 0.2);
+      const h = f.h;
+      const D = Math.max(6, Math.min(13, f.w * 0.9)); // depth into the block
+      const tx = f.tx;
+      const tz = f.tz;
+      const nx = -tz; // normal: from the street toward the building
+      const nz = tx;
+      const cx = f.x + nx * (D / 2); // box centre
+      const cz = f.z + nz * (D / 2);
+
+      const wall = (width: number, fdx: number, fdz: number, px: number, pz: number): void => {
+        const g = facadeQuad(width, h);
+        g.rotateY(Math.atan2(fdx, fdz)); // face outward
+        g.translate(px, 0, pz);
+        paintGeometry(g, color);
+        let list = byStyle.get(style);
+        if (!list) byStyle.set(style, (list = []));
+        list.push(g);
+      };
+      // 3D block: front (faces the street), back, and two sides — windowed.
+      wall(f.w, -nx, -nz, f.x, f.z);
+      wall(f.w, nx, nz, f.x + nx * D, f.z + nz * D);
+      wall(D, -tx, -tz, cx - tx * (f.w / 2), cz - tz * (f.w / 2));
+      wall(D, tx, tz, cx + tx * (f.w / 2), cz + tz * (f.w / 2));
+      // Flat roof slab (slightly darker) + a black water tank (Dhaka rooftops).
+      const roof = new PlaneGeometry(f.w, D);
+      roof.rotateX(-Math.PI / 2);
+      roof.rotateY(Math.atan2(-tz, tx)); // width→tangent, depth→normal
+      roof.translate(cx, h, cz);
+      details.push(paintColored(roof, color.clone().multiplyScalar(0.62)));
+      const tank = new CylinderGeometry(0.55, 0.55, 1.1, 8);
+      tank.translate(cx + tx * (f.w * 0.22), h + 0.55, cz + tz * (f.w * 0.22));
+      details.push(paintColored(tank, new Color('#26292d')));
+
+      // Name board at the footpath's right edge, facing the oncoming player.
       if (f.name && signs < 44) {
-        const big = f.h > 8 || f.kind === 'hospital' || f.kind === 'school' || f.kind === 'landmark';
+        const big = h > 9 || f.kind === 'hospital' || f.kind === 'school' || f.kind === 'landmark';
         const sign = makeSignboard(f.name, signs, big);
-        sign.position.set(4.0, big ? 2.0 : 1.5, f.z);
+        sign.position.set(4.0, big ? 2.4 : 1.7, f.z);
         this.group.add(sign);
         signs++;
       }
     }
     for (const [style, geos] of byStyle) {
-      const merged = mergeGeometries(geos, false);
-      // Unlit flat panels: bright type color × facade texture, cartoon-clean
-      // and never shadowed dark regardless of which way the wall faces.
+      // Lit walls so the 3D form reads (the hemisphere light keeps the shaded
+      // sides from going black); bright type colour × window texture.
+      const mat = new MeshLambertMaterial({
+        map: facadeTexture(style),
+        vertexColors: true,
+        side: DoubleSide,
+      });
+      mat.userData.sharedMap = true; // facadeTexture is a module-cached singleton
+      this.group.add(new Mesh(mergeGeometries(geos, false), mat));
+    }
+    if (details.length) {
       this.group.add(
-        new Mesh(
-          merged,
-          new MeshBasicMaterial({ map: facadeTexture(style), vertexColors: true, side: DoubleSide }),
-        ),
+        new Mesh(mergeGeometries(details, false), new MeshLambertMaterial({ vertexColors: true, flatShading: true })),
       );
     }
   }

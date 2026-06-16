@@ -247,3 +247,10 @@
 - [x] **states/RunState.ts**: `gatherIntersections()` builds world marks from the crossing zones + navigator junctions (merged within 12 m of the last kept), feeds the level + cross-traffic, updates per frame, disposes on exit.
 - [x] Reviewer pass (no blockers); fixed two teardown leaks it found — sign `CanvasTexture` maps now disposed in `LevelRenderer.dispose` (also fixes the pre-existing building signs), and the cross-traffic placeholder material is freed on GLB swap; tightened the junction de-dup. 83 unit + 11 e2e green; screenshot verified (walkway ends, zebra cross-road, a silver SUV crossing sideways, warning sign).
 - **2026-06-16**: M23 — intersections now read as real crossroads.
+
+## M24 — 3D buildings (solid blocks, varied colour, water tanks) ✅
+- [x] Buildings were flat single-plane billboards (cardboard cutouts) → rebuilt as **solid 3D blocks**: 4 windowed walls (front/back/sides) + a flat roof slab + a black rooftop **water tank** (the signature Dhaka detail), lit with `MeshLambertMaterial` so the form reads with light/shade. Heights widened (4–15 m) with a deterministic per-building bump for a varied skyline.
+- [x] **Eye-catching colour**: the generic OSM bulk (residential/commercial/unknown) now draws from a varied-but-cohesive `BUILDING_PALETTE` (terracotta/ochre/sage/dusty-blue/clay/…) keyed by a per-building hash, so the street is lively instead of one flat tan; distinctive types (hospital/school/mosque/…) keep their signature colour. Named-building signboards preserved.
+- [x] Merged per FacadeStyle (walls) + one details mesh (roofs+tanks) → ~5 draw calls, ~7k tris for the whole building set. Reviewer pass: fixed a 90° roof-slab rotation (footprint was swapped) and stopped `dispose()` from freeing the module-cached facade window texture (tagged `userData.sharedMap`); per-instance signboard textures still freed.
+- [x] 83 unit + 11 e2e green; screenshots across Dhanmondi/Gulistan/Puran Dhaka show solid, colourful, dimensional buildings with windows + water tanks.
+- **2026-06-16**: M24 — buildings now look like real 3D buildings; the street is eye-catching.
