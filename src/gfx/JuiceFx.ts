@@ -12,6 +12,7 @@
 import type { PerspectiveCamera } from 'three';
 import type { EventBus } from '@/core/EventBus';
 
+const BASE_FOV = 70; // matches the camera created in main.ts
 const FLOW_TIME = 4.2; // seconds a flow-state lasts
 const HEAT_PER_MISS = 0.26; // heat added per near-miss (≈4 in a row → flow)
 const HEAT_DECAY = 0.34; // heat lost per second when not grazing
@@ -71,10 +72,11 @@ export class JuiceFx {
     this.heat = 0;
   }
 
-  /** Cinematic knockout: red freeze-flash + slow-mo + a strong buzz. */
+  /** Cinematic knockout: red freeze-flash + a strong buzz. (No slow-mo here —
+   *  a knockout immediately freezes for the revive offer or transitions away,
+   *  so driving the shared time-scale would just fight that freeze.) */
   knockout(): void {
     this.redFlash = 1;
-    this.slowmo = Math.max(this.slowmo, 0.5);
     this.haptic(120);
   }
 
@@ -114,10 +116,17 @@ export class JuiceFx {
 
   /** Apply the camera punch + shake. Call after the chase cam is positioned. */
   applyCamera(cam: PerspectiveCamera): void {
-    if (this.kick <= 0.001 && this.shake <= 0.001 && this.flow <= 0) return;
-    const baseFov = 70;
+    if (this.kick <= 0.001 && this.shake <= 0.001 && this.flow <= 0) {
+      // Restore the base FOV exactly once when all effects have ended (the
+      // camera is a long-lived singleton; a stale FOV would persist otherwise).
+      if (cam.fov !== BASE_FOV) {
+        cam.fov = BASE_FOV;
+        cam.updateProjectionMatrix();
+      }
+      return;
+    }
     // Punch in on a graze; widen slightly during flow for a speed rush.
-    cam.fov = baseFov - this.kick * 6 - (this.flow > 0 ? 4 : 0);
+    cam.fov = BASE_FOV - this.kick * 6 - (this.flow > 0 ? 4 : 0);
     cam.updateProjectionMatrix();
     if (this.shake > 0.001) {
       const a = this.shake * 0.06;

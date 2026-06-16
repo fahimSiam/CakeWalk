@@ -139,6 +139,7 @@ export class CrowdActors {
 
     this.headProp = await this.makeProp('props/boxes', true, 0.6);
     this.groundProp = await this.makeProp('props/crate', false, 0.85);
+    if (this.disposed) return;
     this.ready = true;
   }
 

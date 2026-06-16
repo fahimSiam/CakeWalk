@@ -798,6 +798,9 @@ export class RunState implements GameState {
     this.streetEvents.fixedUpdate(dt);
     this.player.speedMul = this.atmosphere.playerSpeedMul * this.streetEvents.speedMul;
     this.crowd.config.widthAdd = this.atmosphere.agentWidthAdd + this.streetEvents.widthAdd;
+    // Flow-state doubles taka; set it in the sim step (deterministic w.r.t.
+    // scoring) rather than in render.
+    this.score.flowActive = this.juice.flowing;
 
     this.prevS = this.player.s;
     this.prevT = this.player.t;
@@ -985,7 +988,6 @@ export class RunState implements GameState {
     cam.lookAt(this.camLook.x, 1.1, this.camLook.z);
     // Near-miss camera punch + shake on top of the chase framing.
     this.juice.applyCamera(cam);
-    this.score.flowActive = this.juice.flowing;
 
     // Crowd = animated Quaternius people (same art style as the player), pooled
     // onto the agents nearest the camera.

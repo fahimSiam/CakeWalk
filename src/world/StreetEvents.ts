@@ -112,7 +112,7 @@ export class StreetEvents {
     out[off + 4] = this.intensity;
   }
   restore(from: Float64Array, off: number): void {
-    this.phase = (['idle', 'warn', 'active'] as Phase[])[from[off]!]!;
+    this.phase = (['idle', 'warn', 'active'] as Phase[])[from[off]!] ?? 'idle';
     this.kind = (['monsoon', 'blackout', 'surge'] as StreetEventKind[])[from[off + 1]!] ?? 'monsoon';
     this.timer = from[off + 2]!;
     this.nextAt = from[off + 3]!;

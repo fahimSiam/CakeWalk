@@ -293,3 +293,12 @@
 - [x] Rebuilt the results share card into an eye-catching, brag-worthy recap (Web Share API w/ file + pre-filled text; download fallback). A **dynamic headline** keyed to the standout stat ("Untouchable through Dhanmondi 🔥", "Foiled 3 pocketmars 🕶", "Not a scratch ✨", "…ate me alive 💀"), a big **hero stat** (near-misses dodged — the thing players brag about), a clean stat grid (taka / best combo / distance+time / pocketmars foiled), star rating, footpath candy-lane motif, and a "Can you beat me?" challenge line. Share text: "I dodged N near-misses … Beat that!".
 - [x] 89 unit + 11 e2e green; screenshot verified the rendered card.
 - **2026-06-17**: M30 — the viral loop; one tap turns a good run into a challenge post.
+
+## M31 — Reviewer fixes for the M26–M30 batch ✅
+- [x] **Blocker: spine lean accumulated unboundedly** — the walk/idle/jump clips don't key the Abdomen bone, so `rotation += lean` compounded every frame (torso slowly folded/spun). Now captured the bone's base rotation and set the lean ABSOLUTELY (`base + lean`), and only override while actually dipping/ducking so run/sit clips keep their spine motion. Verified: no drift after a long walk; dip still bends.
+- [x] **Blocker: camera FOV never restored** — JuiceFx.applyCamera early-returned when idle, leaving a stale punched-in FOV on the singleton camera forever. Now restores BASE_FOV (shared constant) exactly once when all effects end.
+- [x] Knockout no longer drives slow-mo (it immediately freezes for revive or transitions away, so it only fought the freeze) — keeps red flash + buzz.
+- [x] `score.flowActive` now set in fixedUpdate (deterministic w.r.t. scoring) instead of render.
+- [x] Guard `CrowdActors.ready` after async dispose; clamp StreetEvents.restore phase index.
+- [x] 89 unit + 11 e2e green.
+- **2026-06-17**: M31 — addressed the reviewer's two blockers + should-fixes on the juice/events/collection batch.

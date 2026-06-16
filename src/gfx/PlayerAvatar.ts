@@ -72,6 +72,10 @@ export class PlayerAvatar {
   private rig: Object3D | null = null;
   /** Lower-spine bone — leaned so dips/duck bend only the upper body. */
   private spine: Object3D | null = null;
+  /** The spine's base rotation, so the lean is applied absolutely each frame
+   *  (the walk/idle clips don't animate this bone, so `+=` would compound). */
+  private spineBaseX = 0;
+  private spineBaseZ = 0;
   private leanZ = 0; // eased side-lean (dip) applied to the spine
   private duckX = 0; // eased forward-bend (duck) applied to the spine
   private mixer: AnimationMixer | null = null;
@@ -142,6 +146,10 @@ export class PlayerAvatar {
       root.getObjectByName('Spine') ??
       root.getObjectByName('Torso') ??
       null;
+    if (this.spine) {
+      this.spineBaseX = this.spine.rotation.x;
+      this.spineBaseZ = this.spine.rotation.z;
+    }
     this.holder.add(root);
     this.proc.visible = false;
 
@@ -240,11 +248,14 @@ export class PlayerAvatar {
       const act = this.actions[role];
       if (act) act.timeScale = moving ? Math.min(1.8, Math.max(0.5, player.speed / nominal)) : 1;
       this.mixer.update(frameDt);
-      // After the clip poses the skeleton, add the upper-body lean on top so a
-      // dip/duck bends the torso (not the whole body at 45°).
-      if (this.spine) {
-        this.spine.rotation.z += this.leanZ;
-        this.spine.rotation.x += this.duckX;
+      // After the clip poses the skeleton, set the upper-body lean ABSOLUTELY
+      // from the bone's base (this bone isn't keyed by walk/idle, so `+=` would
+      // compound every frame) so a dip/duck bends the torso, not the whole body.
+      // Only override while actually leaning, so clips that DO animate the spine
+      // (run/sit) keep their motion when no dip/duck is active.
+      if (this.spine && (Math.abs(this.leanZ) > 0.002 || this.duckX > 0.002)) {
+        this.spine.rotation.z = this.spineBaseZ + this.leanZ;
+        this.spine.rotation.x = this.spineBaseX + this.duckX;
       }
     }
   }
