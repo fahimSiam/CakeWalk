@@ -70,6 +70,10 @@ export class PlayerAvatar {
 
   // GLB state (populated once the model resolves).
   private rig: Object3D | null = null;
+  /** Lower-spine bone — leaned so dips/duck bend only the upper body. */
+  private spine: Object3D | null = null;
+  private leanZ = 0; // eased side-lean (dip) applied to the spine
+  private duckX = 0; // eased forward-bend (duck) applied to the spine
   private mixer: AnimationMixer | null = null;
   private actions: Partial<Record<ClipRole, AnimationAction>> = {};
   private current: ClipRole | null = null;
@@ -126,6 +130,13 @@ export class PlayerAvatar {
     if (this.bend) bendObject(root, this.bend);
 
     this.rig = root;
+    // Lower-spine bone for upper-body lean (Quaternius HumanArmature naming,
+    // with fallbacks for other rigs).
+    this.spine =
+      root.getObjectByName('Abdomen') ??
+      root.getObjectByName('Spine') ??
+      root.getObjectByName('Torso') ??
+      null;
     this.holder.add(root);
     this.proc.visible = false;
 
@@ -179,11 +190,23 @@ export class PlayerAvatar {
       this.group.rotation.y = Math.atan2(this.pose.dirX, this.pose.dirZ);
     }
 
-    // Jump-lift, dip-tilt and duck-squash apply to both body variants.
+    // Jump-lift applies to both body variants.
     this.holder.position.y = player.y;
-    this.holder.rotation.z =
-      player.pose === Pose.DipLeft ? 0.24 : player.pose === Pose.DipRight ? -0.24 : 0;
-    this.holder.scale.y = player.pose === Pose.Duck ? 0.6 : 1;
+    const dipL = player.pose === Pose.DipLeft;
+    const dipR = player.pose === Pose.DipRight;
+    const duck = player.pose === Pose.Duck;
+    // Ease the upper-body lean/bend targets (applied to the spine bone below for
+    // the GLB; to the whole holder for the procedural fallback).
+    const k = Math.min(1, frameDt * 12);
+    this.leanZ += ((dipL ? 0.42 : dipR ? -0.42 : 0) - this.leanZ) * k;
+    this.duckX += ((duck ? 0.8 : 0) - this.duckX) * k;
+    if (this.rig) {
+      this.holder.rotation.z = 0;
+      this.holder.scale.y = 1;
+    } else {
+      this.holder.rotation.z = dipL ? 0.24 : dipR ? -0.24 : 0;
+      this.holder.scale.y = duck ? 0.6 : 1;
+    }
 
     this.shadow.position.y = 0.02;
     this.shadow.scale.setScalar(1 - player.y * 0.3);
@@ -212,6 +235,12 @@ export class PlayerAvatar {
       const act = this.actions[role];
       if (act) act.timeScale = moving ? Math.min(1.8, Math.max(0.5, player.speed / nominal)) : 1;
       this.mixer.update(frameDt);
+      // After the clip poses the skeleton, add the upper-body lean on top so a
+      // dip/duck bends the torso (not the whole body at 45°).
+      if (this.spine) {
+        this.spine.rotation.z += this.leanZ;
+        this.spine.rotation.x += this.duckX;
+      }
     }
   }
 

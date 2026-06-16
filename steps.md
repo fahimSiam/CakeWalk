@@ -260,3 +260,9 @@
 - [x] Removed the now-unused Kenney GLBs (vehicle-truck-red/green/yellow, vehicle-motorcycle), Textures/colormap.png and LICENSE-kenney.txt; updated LICENSE-assets.txt.
 - [x] 83 unit + 11 e2e green; screenshot confirms only cohesive cars on the road, no big truck.
 - **2026-06-16**: M25 — vehicle fleet is now fully on the cohesive art style.
+
+## M26 — Upper-body dip/duck + crowd carried loads ✅
+- [x] **Dip/duck no longer tilts the whole body 45°**: PlayerAvatar finds the lower-spine bone (Abdomen/Spine/Torso) and, after the walk clip poses the skeleton each frame, adds an eased lean on it — `rotation.z` for Q/E shoulder dips, `rotation.x` for the duck — so only the upper body bends while the legs stay planted. Procedural fallback keeps the old whole-body tilt.
+- [x] **Crowd carries loads again** (gone since the GLB swap): two instanced prop meshes on the matching archetypes — cardboard **boxes on the head** for `headLoadCarrier` (dip/duck under, HIGH band) and a **crate at the feet** for `luggageDragger` (jump over). luggageDragger's band changed FULL→LOW so it's a real jump obstacle. Props are Quaternius GLBs (props/boxes, props/crate) fetched via tools/assets/fetch.mjs, flattened+instanced, world-bent, and disposed with the pool.
+- [x] 83 unit + 11 e2e green; screenshots verified natural shoulder dip + forward duck, and head-boxes / ground-crates on carriers.
+- **2026-06-17**: M26 — readability + the duck/jump obstacle loop is visible again.

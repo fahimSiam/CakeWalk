@@ -109,11 +109,11 @@ export const ARCHETYPES: Archetype[] = [
   },
   {
     id: 'luggageDragger',
-    // Eid theme: drags a trolley bag — long hitbox, slow, erratic stops.
+    // Eid theme: drags a crate/trolley at ground level — JUMP over it (LOW band).
     speedMin: 0.9,
     speedMax: 1.3,
     halfWidth: 0.48,
-    band: Band.FULL,
+    band: Band.LOW,
     bumpDamage: 8,
     stopChance: 0.04,
     weight: 9,

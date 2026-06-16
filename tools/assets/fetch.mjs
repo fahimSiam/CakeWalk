@@ -56,6 +56,13 @@ const MANIFEST = {
     ['street-straight', 'UA4axT3nIQ'],
     ['street-light', '0lxF8Dl1jU'],
   ],
+  // Carried loads for the crowd: head-loads (duck under) + ground luggage (jump).
+  props: [
+    ['boxes', 'bs6ikOeTrR'], // cardboard boxes — head load
+    ['sack', 'LW3jwpPfiN'], // sack — head load
+    ['crate', 'CnMGEDwg8s'], // crate — ground/jump obstacle
+    ['bag', 'VRfAODZ0Xk'], // bag — ground/jump obstacle
+  ],
 };
 
 async function exists(p) {
