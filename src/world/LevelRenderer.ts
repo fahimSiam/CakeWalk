@@ -93,6 +93,21 @@ export interface RestStall {
   angle: number;
 }
 
+/** An intersection (road crossing or route junction) along the route — where
+ *  the walkway breaks, a cross-road cuts across, and a warning sign stands. */
+export interface IntersectionMark {
+  s: number;
+  kind: 'crossing' | 'turn';
+  /** World centre + route tangent (dirX,dirZ) of the intersection. */
+  x: number;
+  z: number;
+  dirX: number;
+  dirZ: number;
+}
+
+/** Half-length (m) of the gap the walkway opens for an intersection. */
+const CHOURASTA_HALF = 5.0;
+
 export class LevelRenderer {
   readonly group = new Group();
   readonly props: PlacedProp[] = [];
@@ -104,6 +119,7 @@ export class LevelRenderer {
     routePts: Vec2[],
     restStalls: RestStall[] = [],
     private bend?: BendUniforms,
+    private intersections: IntersectionMark[] = [],
   ) {
     this.routeRef = routePts;
     const near = makeRouteDistance(routePts);
@@ -111,6 +127,7 @@ export class LevelRenderer {
     this.addGround(routePts);
     this.addRoads(area, near);
     this.addRouteRibbon(routePts);
+    this.addChourastas();
     this.addPolys(area.water, '#5fb0d8', 0.02);
     this.addPolys(area.parks, '#8fd06a', 0.01);
     this.addFacadeWall(area, routePts);
@@ -125,7 +142,12 @@ export class LevelRenderer {
       const mesh = obj as Mesh;
       if (mesh.geometry) mesh.geometry.dispose();
       if (mesh.material) {
-        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) m.dispose();
+        for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          // Material.dispose() does NOT free its textures — the signboards
+          // (building names + junction warnings) each own a CanvasTexture map.
+          (m as MeshBasicMaterial).map?.dispose();
+          m.dispose();
+        }
       }
     });
   }
@@ -231,6 +253,10 @@ export class LevelRenderer {
     for (let r = 0; r < samples.length - 1; r++) {
       const a = samples[r]!;
       const b = samples[r + 1]!;
+      // Open a gap in the walkway where an intersection cuts across.
+      const mx = (a.p[0] + b.p[0]) / 2;
+      const mz = (a.p[1] + b.p[1]) / 2;
+      if (this.intersections.some((m) => Math.hypot(m.x - mx, m.z - mz) < CHOURASTA_HALF)) continue;
       for (let c = 0; c < COLS; c++) {
         const t0 = -half + (c / COLS) * WIDTH;
         const t1 = -half + ((c + 1) / COLS) * WIDTH;
@@ -253,6 +279,90 @@ export class LevelRenderer {
     this.group.add(
       new Mesh(geo, new MeshLambertMaterial({ vertexColors: true, side: DoubleSide })),
     );
+  }
+
+  /**
+   * Renders each intersection as a chourasta: a perpendicular asphalt cross-road
+   * cutting through the (now broken) walkway, zebra stripes, and a warning
+   * signboard a little before it so the player sees the junction coming.
+   */
+  private addChourastas(): void {
+    const quad = (
+      cx: number,
+      cz: number,
+      tx: number,
+      tz: number,
+      nx: number,
+      nz: number,
+      tHalf: number,
+      n0: number,
+      n1: number,
+      y: number,
+      color: Color,
+      verts: number[],
+      colors: number[],
+      idx: number[],
+    ): void => {
+      const corners: [number, number][] = [
+        [cx - tx * tHalf + nx * n0, cz - tz * tHalf + nz * n0],
+        [cx + tx * tHalf + nx * n0, cz + tz * tHalf + nz * n0],
+        [cx + tx * tHalf + nx * n1, cz + tz * tHalf + nz * n1],
+        [cx - tx * tHalf + nx * n1, cz - tz * tHalf + nz * n1],
+      ];
+      const base = verts.length / 3;
+      for (const [x, z] of corners) {
+        verts.push(x, y, z);
+        colors.push(color.r, color.g, color.b);
+      }
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    };
+
+    const verts: number[] = [];
+    const colors: number[] = [];
+    const idx: number[] = [];
+    const asphalt = new Color('#3f454b');
+    const white = new Color('#e9e4d6');
+    for (const m of this.intersections) {
+      const tx = m.dirX;
+      const tz = m.dirZ;
+      const nx = -m.dirZ; // lateral (across the road)
+      const nz = m.dirX;
+      // Perpendicular road surface, from past the car road (left) to past the
+      // walkway's right edge.
+      quad(m.x, m.z, tx, tz, nx, nz, CHOURASTA_HALF, -34, 13, 0.038, asphalt, verts, colors, idx);
+      // Zebra stripes across the walkway side so the crossing reads clearly.
+      for (let k = 0; k < 7; k++) {
+        const n = -10 + k * 3.0;
+        quad(m.x, m.z, tx, tz, nx, nz, CHOURASTA_HALF * 0.82, n, n + 1.1, 0.044, white, verts, colors, idx);
+      }
+      this.addJunctionSign(m);
+    }
+    if (!idx.length) return;
+    const geo = new BufferGeometry();
+    geo.setAttribute('position', new BufferAttribute(new Float32Array(verts), 3));
+    geo.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    this.group.add(new Mesh(geo, new MeshLambertMaterial({ vertexColors: true, side: DoubleSide })));
+  }
+
+  /** A warning signboard on a post, standing on the right just before a
+   *  junction and facing the approaching player. */
+  private addJunctionSign(m: IntersectionMark): void {
+    const label = m.kind === 'turn' ? 'JUNCTION ' : 'CROSSING ';
+    const sign = makeSignboard(label, Math.round(Math.abs(m.s)), true);
+    // Right edge of the walkway, ~9 m before the junction (on the player's side).
+    const sx = m.x - m.dirX * 9 + -m.dirZ * 5.2;
+    const sz = m.z - m.dirZ * 9 + m.dirX * 5.2;
+    sign.position.set(sx, 2.5, sz);
+    sign.rotation.y = Math.atan2(-m.dirX, -m.dirZ); // face the approaching player
+    this.group.add(sign);
+    const post = new Mesh(
+      new CylinderGeometry(0.07, 0.07, 2.5, 6),
+      new MeshLambertMaterial({ color: '#7a7064' }),
+    );
+    post.position.set(sx, 1.25, sz);
+    this.group.add(post);
   }
 
   /**

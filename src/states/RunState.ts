@@ -16,7 +16,8 @@ import {
 } from 'three';
 import { PlayerAvatar } from '@/gfx/PlayerAvatar';
 import { SplineCorridor } from '@/world/SplineCorridor';
-import { LevelRenderer } from '@/world/LevelRenderer';
+import { LevelRenderer, type IntersectionMark } from '@/world/LevelRenderer';
+import { CrossTrafficRenderer } from '@/gfx/CrossTraffic';
 import type { BakedArea } from '@/world/levelTypes';
 import type { RouteOption } from '@/routing/RouteGraph';
 import type { GameState } from '@/core/StateMachine';
@@ -122,6 +123,7 @@ export class RunState implements GameState {
   private prevS = 0;
   private prevT = 0;
   private level: LevelRenderer | null = null;
+  private crossTraffic: CrossTrafficRenderer | null = null;
   private params: RunParams = { seed: 1 };
   private runLength = RUN_LENGTH;
   private pickpockets!: PickpocketSystem;
@@ -517,6 +519,30 @@ export class RunState implements GameState {
     this.ctx.machine.transition('run', next);
   }
 
+  /** World-space marks for every intersection the player meets — the crossing
+   *  zones (road crossings) and the navigator's junctions (route changes) —
+   *  so the level can break the walkway, lay a cross-road and stand a sign,
+   *  and the cross-traffic can drive through. Merged when very close. */
+  private gatherIntersections(): IntersectionMark[] {
+    const out: IntersectionMark[] = [];
+    const pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
+    const add = (s: number, kind: 'crossing' | 'turn'): void => {
+      if (s < 16 || s > this.runLength - 10) return;
+      this.corridor.toWorld(s, 0, pose);
+      out.push({ s, kind, x: pose.x, z: pose.z, dirX: pose.dirX, dirZ: pose.dirZ });
+    };
+    for (const z of this.traffic.zones) add(z.s, 'crossing');
+    for (const dp of this.navigator?.decisionPoints ?? []) add(dp.s, 'turn');
+    out.sort((a, b) => a.s - b.s);
+    // Merge marks closer than 12 m to the last KEPT one (a junction that's also
+    // a crossing = one chourasta), so dense clusters don't all collapse.
+    const merged: IntersectionMark[] = [];
+    for (const m of out) {
+      if (!merged.length || m.s - merged[merged.length - 1]!.s > 12) merged.push(m);
+    }
+    return merged;
+  }
+
   /** Crossing zones: every route intersection plus gap-fillers so the player
    *  meets way more crossings (idea.md Rev 8). */
   private buildCrossingZones(): CrossingZone[] {
@@ -677,6 +703,8 @@ export class RunState implements GameState {
     this.turnGame.dispose();
     this.level?.dispose(this.scene);
     this.level = null;
+    this.crossTraffic?.dispose(this.scene);
+    this.crossTraffic = null;
     this.atmosphereHandle.dispose();
     // Graybox planes / finish gate / anything buildScene created directly.
     for (const r of this.ownedResources) {
@@ -931,6 +959,7 @@ export class RunState implements GameState {
     this.crowdActors.update(this.player.s, frameDt);
     this.pmRenderer.render(frameDt);
     this.trafficRenderer.render();
+    this.crossTraffic?.update(frameDt);
     this.lifeRenderer.render();
     this.renderGhost();
     // Floating ☕/🪑 cue above the rest spot the sit button would use.
@@ -1063,13 +1092,16 @@ export class RunState implements GameState {
     if (this.params.area && this.params.route && this.projector) {
       // Real Dhaka, unrolled straight: build from baked OSM data mapped into
       // the straight corridor so the road never bends while walking.
+      const marks = this.gatherIntersections();
       this.level = new LevelRenderer(
         this.scene,
         straightenArea(this.params.area, this.projector),
         straightRoute(this.params.route.pts, this.projector),
         this.buildRestStalls(),
         this.bendUniforms,
+        marks,
       );
+      this.crossTraffic = new CrossTrafficRenderer(this.scene, marks, this.bendUniforms);
       const end: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
       this.corridor.toWorld(this.runLength, 0, end);
       const gate = this.own(

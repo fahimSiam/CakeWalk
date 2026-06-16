@@ -239,3 +239,11 @@
 - [x] While resting at a cha dokan / bus stop, `Player.applyBump` returns false — the crowd, traffic, dogs/cats and even a stampede flow past without hurting a seated player. Pocketmars can still approach and steal (theft is a separate `score.steal` path, not `applyBump`), so resting stays risky in the way the design intends.
 - [x] 83 unit (+1: no bump damage while resting; vulnerable again on standing) + 11 e2e green.
 - **2026-06-16**: M22 — small gameplay fix per feedback.
+
+## M23 — Chourasta intersections (crossing/junction get a real crossroads) ✅
+- [x] As the player nears a road crossing OR a route-change junction, the world now shows it's coming: a **warning signboard** on a post stands ~9 m before it (facing the player), the **walkway breaks** (a gap is cut in the 4-lane footpath), a **perpendicular asphalt cross-road with zebra stripes** cuts across, and **cars drive sideways** through the junction — a proper chourasta.
+- [x] **world/LevelRenderer.ts**: new `IntersectionMark` type + `intersections` constructor param. `addLaneFootpath` opens a gap near each mark; `addChourastas()` merges the cross-road + zebra into one geometry; `addJunctionSign()` reuses `makeSignboard` ("CROSSING"/"JUNCTION") on a post.
+- [x] **gfx/CrossTraffic.ts** (NEW): `CrossTrafficRenderer` — an InstancedMesh of GLB cars (cars/suv, vertex-colour-baked) looping along the lateral axis at each junction in a few lanes, both directions; world-bent; allocation-free per-frame update.
+- [x] **states/RunState.ts**: `gatherIntersections()` builds world marks from the crossing zones + navigator junctions (merged within 12 m of the last kept), feeds the level + cross-traffic, updates per frame, disposes on exit.
+- [x] Reviewer pass (no blockers); fixed two teardown leaks it found — sign `CanvasTexture` maps now disposed in `LevelRenderer.dispose` (also fixes the pre-existing building signs), and the cross-traffic placeholder material is freed on GLB swap; tightened the junction de-dup. 83 unit + 11 e2e green; screenshot verified (walkway ends, zebra cross-road, a silver SUV crossing sideways, warning sign).
+- **2026-06-16**: M23 — intersections now read as real crossroads.
