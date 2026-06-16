@@ -288,3 +288,8 @@
 - [x] MenuState shop renders character rows with Wear/Worn (same UX as outfits).
 - [x] 89 unit (+2 collection: buy/own/equip + auto-wear, mystery box unlock-until-complete; migration v2 covered) + 11 e2e green; screenshot verified playing as the Eid Apu (red dress) matching the crowd style.
 - **2026-06-17**: M29 — identity/collection retention hook; pick who you run as.
+
+## M30 — Viral run-recap share card ✅
+- [x] Rebuilt the results share card into an eye-catching, brag-worthy recap (Web Share API w/ file + pre-filled text; download fallback). A **dynamic headline** keyed to the standout stat ("Untouchable through Dhanmondi 🔥", "Foiled 3 pocketmars 🕶", "Not a scratch ✨", "…ate me alive 💀"), a big **hero stat** (near-misses dodged — the thing players brag about), a clean stat grid (taka / best combo / distance+time / pocketmars foiled), star rating, footpath candy-lane motif, and a "Can you beat me?" challenge line. Share text: "I dodged N near-misses … Beat that!".
+- [x] 89 unit + 11 e2e green; screenshot verified the rendered card.
+- **2026-06-17**: M30 — the viral loop; one tap turns a good run into a challenge post.

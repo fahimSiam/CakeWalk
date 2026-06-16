@@ -135,47 +135,78 @@ export class ResultsState implements GameState {
     this.root.querySelector('#cw-share')!.addEventListener('click', () => void this.share(r, stars));
   }
 
-  /** Render a share card to canvas → native share sheet (or download). */
+  /** Render an eye-catching recap card → native share sheet (or download). The
+   *  headline + hero stat are keyed to what stood out, so every share brags
+   *  about something different. */
   private async share(r: RunResult, stars: StarBreakdown | null): Promise<void> {
+    const W = 720;
+    const H = 1100;
     const canvas = document.createElement('canvas');
-    canvas.width = 720;
-    canvas.height = 900;
+    canvas.width = W;
+    canvas.height = H;
     const g = canvas.getContext('2d')!;
-    const grad = g.createLinearGradient(0, 0, 0, 900);
-    grad.addColorStop(0, '#2a1f12');
-    grad.addColorStop(1, '#1a1208');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, 720, 900);
-    g.fillStyle = '#fff';
-    g.font = '900 64px system-ui';
-    g.fillText('CakeWalk', 60, 120);
-    g.fillStyle = '#e8a33d';
-    g.font = '700 28px system-ui';
     const where = r.runParams.area ? r.runParams.area.nameEn : 'Dhaka';
-    g.fillText(r.runParams.daily ? `Ajker Rasta · ${where}` : where, 60, 170);
-    g.fillStyle = '#fff';
-    g.font = '900 54px system-ui';
-    g.fillText(r.success ? `I survived ${where}` : `${where} ate me alive`, 60, 300);
+
+    // Background: success blue / fail red into warm dark, with faint footpath
+    // candy-lane stripes along the bottom (the game's motif).
+    const grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, r.success ? '#23407a' : '#5a1f1f');
+    grad.addColorStop(0.55, '#241a0e');
+    grad.addColorStop(1, '#140d06');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle = ['#d98c6a18', '#e0b65c18', '#7fb09a18', '#6f9cc018'][i]!;
+      g.fillRect(40 + i * 165, H - 240, 150, 240);
+    }
+
     g.fillStyle = '#ffd34a';
-    g.font = '800 90px system-ui';
-    g.fillText(`৳ ${r.taka}`, 60, 430);
+    g.font = '900 70px system-ui';
+    g.fillText('CakeWalk', 56, 110);
+    g.fillStyle = '#ffffffcc';
+    g.font = '700 30px system-ui';
+    g.fillText(r.runParams.daily ? `🗓 Ajker Rasta · ${where}` : `📍 ${where}`, 58, 158);
+
     g.fillStyle = '#fff';
-    g.font = '500 30px system-ui';
-    g.fillText(`${Math.round(r.distance)} m in ${fmtTime(r.timeS)}`, 60, 500);
-    g.fillText(`best combo x${r.bestCombo}`, 60, 550);
+    g.font = '900 58px system-ui';
+    wrapText(g, this.headline(r), 56, 268, W - 100, 66);
+
+    // Hero stat: the dodge count (the thrill people brag about).
+    g.fillStyle = '#7ad0ff';
+    g.font = '900 150px system-ui';
+    g.fillText(`${r.nearMisses}`, 52, 580);
+    g.fillStyle = '#ffffffcc';
+    g.font = '700 34px system-ui';
+    g.fillText('near-misses dodged', 60, 628);
+
+    const stat = (x: number, y: number, val: string, label: string, col = '#ffd34a'): void => {
+      g.fillStyle = col;
+      g.font = '900 50px system-ui';
+      g.fillText(val, x, y);
+      g.fillStyle = '#ffffffaa';
+      g.font = '600 25px system-ui';
+      g.fillText(label, x, y + 36);
+    };
+    stat(56, 740, `৳${r.taka}`, 'taka earned');
+    stat(400, 740, `x${r.bestCombo}`, 'best combo', '#ff8a5b');
+    stat(56, 858, `${Math.round(r.distance)} m`, fmtTime(r.timeS), '#7fb09a');
+    if (r.summary.spotted > 0) stat(400, 858, `${r.summary.spotted}`, 'pocketmars foiled', '#ff6f9e');
+
     if (stars) {
       g.font = '60px system-ui';
-      g.fillText('★'.repeat(stars.total) + '☆'.repeat(5 - stars.total), 60, 650);
+      g.fillText('★'.repeat(stars.total) + '☆'.repeat(5 - stars.total), 56, 968);
     }
-    g.fillStyle = '#888';
-    g.font = '400 22px system-ui';
-    g.fillText('Walking against the Eid exodus, one street at a time.', 60, 800);
-    g.fillText('Map data © OpenStreetMap contributors', 60, 840);
+
+    g.fillStyle = '#ffffff66';
+    g.font = '400 24px system-ui';
+    g.fillText('Walk home against the Eid exodus. Can you beat me?', 56, H - 78);
+    g.fillText('Map data © OpenStreetMap contributors', 56, H - 42);
 
     const blob = await new Promise<Blob>((res) => canvas.toBlob((b) => res(b!), 'image/png'));
     const file = new File([blob], 'cakewalk.png', { type: 'image/png' });
+    const text = `I dodged ${r.nearMisses} near-misses walking home through ${where} in CakeWalk — ৳${r.taka}, combo x${r.bestCombo}. Beat that!`;
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'CakeWalk' });
+      await navigator.share({ files: [file], title: 'CakeWalk', text });
     } else {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -183,6 +214,17 @@ export class ResultsState implements GameState {
       a.click();
       URL.revokeObjectURL(a.href);
     }
+  }
+
+  /** Brag headline from whatever was most impressive this run. */
+  private headline(r: RunResult): string {
+    const where = r.runParams.area ? r.runParams.area.nameEn : 'Dhaka';
+    if (!r.success) return `${where} ate me alive 💀`;
+    if (r.bestCombo >= 15) return `Untouchable through ${where} 🔥`;
+    if (r.summary.spotted >= 3) return `Foiled ${r.summary.spotted} pocketmars 🕶`;
+    if (r.healthFraction >= 0.99) return `Not a scratch in ${where} ✨`;
+    if (r.nearMisses >= 20) return `Threaded ${r.nearMisses} near-misses 😮‍💨`;
+    return `Made it home through ${where} 🏠`;
   }
 
   exit(): void {
@@ -201,4 +243,29 @@ function star(earned: boolean, label: string): string {
 function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
   return `${m}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
+/** Word-wrap canvas text to a max width, drawing each line `lh` apart. */
+function wrapText(
+  g: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxW: number,
+  lh: number,
+): void {
+  const words = text.split(' ');
+  let line = '';
+  let yy = y;
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (g.measureText(test).width > maxW && line) {
+      g.fillText(line, x, yy);
+      line = w;
+      yy += lh;
+    } else {
+      line = test;
+    }
+  }
+  if (line) g.fillText(line, x, yy);
 }
