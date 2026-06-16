@@ -41,6 +41,8 @@ import { PhoneOverlay } from '@/ui/PhoneOverlay';
 import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
 import { JuiceFx } from '@/gfx/JuiceFx';
+import { StreetEvents } from '@/world/StreetEvents';
+import { EventFx } from '@/gfx/EventFx';
 import { RestMarker } from '@/gfx/RestMarker';
 import { CrossingMinigame } from '@/ui/CrossingMinigame';
 import { bendObject, makeBendUniforms, type BendUniforms } from '@/gfx/worldBend';
@@ -139,6 +141,13 @@ export class RunState implements GameState {
   private sandWatch!: SandWatch;
   private rewindFx!: RewindFx;
   private juice!: JuiceFx;
+  private streetEvents!: StreetEvents;
+  private eventFx!: EventFx;
+  /** Scene lights captured so street events can dim/restore them. */
+  private baseHemi = 1;
+  private baseSun = 1;
+  private hemiLight: HemisphereLight | null = null;
+  private sunLight: DirectionalLight | null = null;
   private elapsed = 0;
   private summary: RunSummary = {
     chaCups: 0,
@@ -242,6 +251,8 @@ export class RunState implements GameState {
     this.traffic = new TrafficSystem(this.rng.stream('traffic'), this.bus);
     this.traffic.setZones(this.buildCrossingZones());
     this.streetLife = new StreetLife(this.rng.stream('streetlife'), this.bus);
+    // Random mid-run street events (off on tutorial; daily keeps it for variety).
+    this.streetEvents = new StreetEvents(this.rng.stream('events'), this.bus, !p.tutorial);
     this.interactions = new Interactions(this.bus);
     this.interactions.points = this.buildRoutePoints();
     this.streetLife.populate(
@@ -255,11 +266,11 @@ export class RunState implements GameState {
     // Sand Watch: ring buffer over every sim system + RNG stream states.
     const rngSnapshot: Snapshottable = {
       snapshot: (out, off) => {
-        const names = ['crowd', 'pocketmar', 'traffic', 'streetlife', 'director'];
+        const names = ['crowd', 'pocketmar', 'traffic', 'streetlife', 'director', 'events'];
         names.forEach((n, i) => (out[off + i] = this.rng.stream(n).getState()));
       },
       restore: (from, off) => {
-        const names = ['crowd', 'pocketmar', 'traffic', 'streetlife', 'director'];
+        const names = ['crowd', 'pocketmar', 'traffic', 'streetlife', 'director', 'events'];
         names.forEach((n, i) => this.rng.stream(n).setState(from[off + i]!));
       },
     };
@@ -295,7 +306,8 @@ export class RunState implements GameState {
       { sys: this.interactions, floats: this.interactions.snapFloats() },
       { sys: this.director, floats: Director.SNAP_FLOATS },
       { sys: this.score, floats: RunScore.SNAP_FLOATS },
-      { sys: rngSnapshot, floats: 5 },
+      { sys: this.streetEvents, floats: StreetEvents.SNAP_FLOATS },
+      { sys: rngSnapshot, floats: 6 },
     ]);
     this.sandWatch = new SandWatch(buffer);
     const save = this.ctx.save.get();
@@ -336,6 +348,7 @@ export class RunState implements GameState {
     this.phoneOverlay = new PhoneOverlay();
     this.rewindFx = new RewindFx(this.ctx.renderer.domElement);
     this.juice = new JuiceFx(this.ctx.renderer.domElement, this.bus, this.ctx.loopTimeScale);
+    this.eventFx = new EventFx(this.ctx.renderer.domElement, this.streetEvents);
 
     // Curved-world bend: straight under the player, road falls away in the
     // distance. Patches every mesh material now that the scene is fully built.
@@ -355,6 +368,9 @@ export class RunState implements GameState {
 
     this.bus.on('bump', () => this.hud.toast(t('bumped'), 0));
     this.bus.on('cakewalkMeterFull', () => this.hud.toast(t('cakewalk'), 0));
+    this.bus.on('streetEvent', (e) => {
+      if (e.phase === 'warn' && e.toast) this.hud.toast(e.toast, 0);
+    });
     this.bus.on('theft', (e) => {
       this.hud.toast(tf('theft', e.amount), 0);
       if (this.params.tutorial && !this.tutorialTheftDone) {
@@ -697,6 +713,7 @@ export class RunState implements GameState {
     this.phoneOverlay.dispose();
     this.rewindFx.dispose();
     this.juice.dispose();
+    this.eventFx.dispose();
     this.avatar.dispose(this.scene);
     this.crowdActors.dispose();
     this.pmRenderer.dispose(this.scene);
@@ -773,6 +790,12 @@ export class RunState implements GameState {
     }
     if (input.phone) this.interactions.togglePhone(this.player);
     if (input.overbridge) this.traffic.useOverbridge(this.player);
+
+    // Random street events: advance, then fold their modifiers onto the base
+    // atmosphere ones (downpour slows you, a surge thickens the crowd).
+    this.streetEvents.fixedUpdate(dt);
+    this.player.speedMul = this.atmosphere.playerSpeedMul * this.streetEvents.speedMul;
+    this.crowd.config.widthAdd = this.atmosphere.agentWidthAdd + this.streetEvents.widthAdd;
 
     this.prevS = this.player.s;
     this.prevT = this.player.t;
@@ -1011,6 +1034,11 @@ export class RunState implements GameState {
     this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
     this.rewindFx.frame(frameDt);
     this.juice.frame(frameDt);
+    this.eventFx.frame(frameDt);
+    // Street-event darkening on the scene lights (blackout / downpour dusk).
+    const dim = 1 - this.streetEvents.darkness;
+    if (this.hemiLight) this.hemiLight.intensity = this.baseHemi * dim;
+    if (this.sunLight) this.sunLight.intensity = this.baseSun * dim;
     this.atmosphereHandle.frame(frameDt);
     if (this.player.phoneLocked && this.params.area && this.params.route && this.projector) {
       const rp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
@@ -1088,10 +1116,16 @@ export class RunState implements GameState {
     this.scene = new Scene();
     this.scene.background = new Color('#c9b18a'); // dusty Dhaka haze
     this.scene.fog = new Fog('#c9b18a', 30, 130);
-    this.scene.add(new HemisphereLight(0xfff3da, 0x5a4a35, 1.05));
+    const hemi = new HemisphereLight(0xfff3da, 0x5a4a35, 1.05);
+    this.scene.add(hemi);
     const sun = new DirectionalLight(0xffe7c0, 1.1);
     sun.position.set(-30, 60, -20);
     this.scene.add(sun);
+    // Remember base light levels so street events can darken/restore them.
+    this.hemiLight = hemi;
+    this.sunLight = sun;
+    this.baseHemi = hemi.intensity;
+    this.baseSun = sun.intensity;
     // Time-of-day & weather overrides + rain updater.
     this.atmosphereHandle = dressScene(this.scene, this.atmosphere, () => ({
       x: this.pose.x,

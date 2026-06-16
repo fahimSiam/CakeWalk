@@ -35,6 +35,7 @@ export interface GameEvents {
   microEvent: { kind: string };
   runFinished: { success: boolean };
   cakewalkMeterFull: Record<string, never>;
+  streetEvent: { kind: 'monsoon' | 'blackout' | 'surge'; phase: 'warn' | 'active' | 'end'; toast?: string };
 }
 
 export type EventName = keyof GameEvents;

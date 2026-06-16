@@ -274,3 +274,10 @@
 - [x] **RunScore.flowActive** doubles the multiplier (alongside the Cakewalk meter); wired from JuiceFx each frame.
 - [x] 84 unit (+1 flow multiplier) + 11 e2e green; screenshot verified flow vignette + banner + 🔥🔥🔥 x12 combo.
 - **2026-06-17**: M27 — the core "one more run" feel; near-misses are now a moment, hot streaks feel powerful.
+
+## M28 — Random mid-run street events ✅
+- [x] **world/StreetEvents.ts** (NEW, sim/testable/snapshotted): telegraphed, time-boxed surprise events on a seeded timer (first ~22 s, then every 26–46 s). Three kinds: **monsoon** (downpour — slows you + darkens), **blackout** (load-shedding — lights cut, world goes dark), **surge** (crowd thickens & presses, harder to weave). Eased intensity ramps in/out; exposes speedMul / darkness / widthAdd modifiers + emits a `streetEvent` bus event (warn→active→end). Off on the tutorial; included in Sand Watch snapshot (+ the new `events` rng stream).
+- [x] **gfx/EventFx.ts** (NEW): screen overlay — animated rain streaks (monsoon) + a darkening tint (dusk for monsoon, near-black + faint flicker for blackout), driven by the event's eased strength.
+- [x] **RunState**: advances events each tick and folds their modifiers onto the base atmosphere (player.speedMul, crowd widthAdd); dims/restores the hemisphere+sun lights by `darkness`; toasts the warning ("🌧️ Downpour!", "🔌 Load-shedding!", "🎉 Crowd surge"); disposes the FX.
+- [x] 87 unit (+3 StreetEvents: idle→warn→active progression, disabled never fires, snapshot round-trip) + 11 e2e green; screenshots verified monsoon rain/dusk and blackout darkness.
+- **2026-06-17**: M28 — per-run variety/surprise; every run can throw a downpour, blackout, or crowd surge.
