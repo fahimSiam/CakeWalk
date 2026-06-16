@@ -22,8 +22,8 @@ export interface BendUniforms {
 /** Tunable globally; RunState owns the single instance for a run. */
 export function makeBendUniforms(): BendUniforms {
   return {
-    uBendDrop: { value: 0.0023 }, // meters dropped per (meter beyond near)^2
-    uBendNear: { value: 13 }, // straight zone in front of the camera (m)
+    uBendDrop: { value: 0.0013 }, // meters dropped per (meter beyond near)^2
+    uBendNear: { value: 18 }, // straight zone in front of the camera (m)
   };
 }
 

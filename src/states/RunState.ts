@@ -34,7 +34,8 @@ import { TrafficSystem, type CrossingZone } from '@/traffic/TrafficSystem';
 import { StreetLife } from '@/world/StreetLife';
 import { Director } from '@/director/Director';
 import { Interactions, type RoutePoint } from '@/world/Interactions';
-import { PickpocketRenderer, StreetLifeRenderer, TrafficRenderer } from '@/gfx/entityRenderers';
+import { StreetLifeRenderer, TrafficRenderer } from '@/gfx/entityRenderers';
+import { PickpocketRenderer } from '@/gfx/PickpocketActors';
 import { PhoneOverlay } from '@/ui/PhoneOverlay';
 import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
@@ -323,7 +324,7 @@ export class RunState implements GameState {
       this.bendUniforms,
     );
     this.setupGhost(p);
-    this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor);
+    this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor, this.bendUniforms);
     this.trafficRenderer = new TrafficRenderer(this.scene, this.traffic, this.corridor, this.bendUniforms);
     this.lifeRenderer = new StreetLifeRenderer(this.scene, this.streetLife, this.corridor, this.bendUniforms);
     this.restMarker = new RestMarker(this.scene);
@@ -476,6 +477,11 @@ export class RunState implements GameState {
     const dp = dps[this.nextDecision];
     if (!dp || this.player.s < dp.s - 6) return;
     dp.consumed = true;
+    // Estimate the remaining distance to the destination via each branch, so
+    // the player can weigh the options (the marked road isn't always shortest).
+    for (const b of dp.branches) {
+      if (b.distM === undefined) b.distM = this.navigator.replan(dp, b)?.lengthM;
+    }
     const accent = OUTFIT_COLORS[this.ctx.save.get().equippedOutfit] ?? OUTFIT_COLORS.default!;
     void this.turnGame.open(dp.branches, accent).then((res) => this.resolveTurn(dp, res));
   }
@@ -923,7 +929,7 @@ export class RunState implements GameState {
     // Crowd = animated Quaternius people (same art style as the player), pooled
     // onto the agents nearest the camera.
     this.crowdActors.update(this.player.s, frameDt);
-    this.pmRenderer.render();
+    this.pmRenderer.render(frameDt);
     this.trafficRenderer.render();
     this.lifeRenderer.render();
     this.renderGhost();

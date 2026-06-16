@@ -6,7 +6,6 @@ import {
   BoxGeometry,
   Color,
   DynamicDrawUsage,
-  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   MeshLambertMaterial,
@@ -16,15 +15,8 @@ import {
   Vector3,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import {
-  buildCngGeometry,
-  buildPersonGeometry,
-  buildRickshawGeometry,
-  paintColored,
-} from './meshFactory';
+import { buildCngGeometry, buildRickshawGeometry, paintColored } from './meshFactory';
 import { loadVehicleModel } from './models';
-import { applyWalkShader } from './walkShader';
-import { MAX_POCKETMARS, PickpocketSystem, PmState } from '@/pickpocket/PickpocketSystem';
 import { MAX_VEHICLES, TrafficSystem, VEHICLE_KINDS } from '@/traffic/TrafficSystem';
 import { StreetLife, MAX_COWS, CowState } from '@/world/StreetLife';
 import type { Corridor, PathPose } from '@/world/Corridor';
@@ -48,7 +40,8 @@ function swapAnimalGlb(
     const geo = model.geometry.clone();
     const s = targetHeight / model.sy;
     geo.scale(s, s, s);
-    geo.rotateY(-Math.PI / 2); // +Z forward → +X to match procedural creatures
+    // Keep the GLB's natural +Z forward (like the cars) so the body aligns with
+    // the travel direction the renderer faces it — no sideways cow.
     // Clone the cached material so bend + dispose never touch the shared source.
     const mat = (model.material as MeshLambertMaterial).clone();
     if (bend) applyWorldBend(mat, bend);
@@ -70,71 +63,6 @@ const HIDDEN = new Matrix4().compose(
   new Quaternion(),
   new Vector3(0.001, 0.001, 0.001),
 );
-
-export class PickpocketRenderer {
-  private mesh: InstancedMesh;
-  private phaseAttr: InstancedBufferAttribute;
-  private swingAttr: InstancedBufferAttribute;
-  private dummy = new Object3D();
-  private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
-  private plain = new Color('#5a5f52'); // blends into the crowd
-  private revealed = new Color('#ff5a3c'); // glasses / full suspicion
-
-  constructor(scene: Scene, private pm: PickpocketSystem, private corridor: Corridor) {
-    const mat = new MeshLambertMaterial({ flatShading: true });
-    applyWalkShader(mat, 'instanced');
-    const geo = buildPersonGeometry();
-    this.phaseAttr = new InstancedBufferAttribute(new Float32Array(MAX_POCKETMARS), 1);
-    this.swingAttr = new InstancedBufferAttribute(new Float32Array(MAX_POCKETMARS), 1);
-    this.phaseAttr.setUsage(DynamicDrawUsage);
-    this.swingAttr.setUsage(DynamicDrawUsage);
-    geo.setAttribute('aPhase', this.phaseAttr);
-    geo.setAttribute('aSwing', this.swingAttr);
-    this.mesh = new InstancedMesh(geo, mat, MAX_POCKETMARS);
-    this.mesh.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    scene.add(this.mesh);
-  }
-
-  render(): void {
-    const pm = this.pm;
-    for (let i = 0; i < MAX_POCKETMARS; i++) {
-      if (pm.state[i] === PmState.Inactive) {
-        this.mesh.setMatrixAt(i, HIDDEN);
-        continue;
-      }
-      this.corridor.toWorld(pm.s[i]!, pm.t[i]!, this.pose);
-      this.dummy.position.set(this.pose.x, 0, this.pose.z);
-      // Disguised walk with the flow; turned/striking face the player's way.
-      const facing = pm.state[i] === PmState.Disguised ? -1 : 1;
-      this.dummy.rotation.set(0, Math.atan2(this.pose.dirX * facing, this.pose.dirZ * facing), 0);
-      this.dummy.scale.setScalar(1);
-      this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
-      this.phaseAttr.setX(i, pm.phase[i]!);
-      this.swingAttr.setX(i, 0.35);
-      // Reveal: glasses show them outright; otherwise suspicion bleeds color
-      // in only when fully telegraphed (Striking).
-      const reveal =
-        pm.glassesActive && pm.innocent[i] === 0
-          ? 1
-          : pm.state[i] === PmState.Striking
-            ? Math.min(1, pm.suspicion[i]!)
-            : 0;
-      this.mesh.setColorAt(i, reveal > 0 ? this.revealed.clone().lerp(this.plain, 1 - reveal) : this.plain);
-    }
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.phaseAttr.needsUpdate = true;
-    this.swingAttr.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-  }
-
-  dispose(scene: Scene): void {
-    scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    (this.mesh.material as MeshLambertMaterial).dispose();
-  }
-}
 
 export class TrafficRenderer {
   /** One InstancedMesh per vehicle kind: bus/bike are real Kenney models
@@ -339,8 +267,8 @@ export class StreetLifeRenderer {
     }
 
     // Swap the procedural placeholders for real Quaternius animal GLBs (kept
-    // instanced via the flatten-to-vertex-colours loader). The model's +Z
-    // forward is rotated to +X to match the procedural convention.
+    // instanced via the flatten loader). The GLB's natural +Z forward matches
+    // how the renderer faces them, so no extra rotation is baked in.
     swapAnimalGlb(this.dogMesh, 'animals/dog', 0.6, false, this.bend); // single texture
     swapAnimalGlb(this.catMesh, 'animals/cat', 0.35, false, this.bend); // single texture
     swapAnimalGlb(this.cowMesh, 'animals/cow', 1.5, true, this.bend); // 7 flat colours

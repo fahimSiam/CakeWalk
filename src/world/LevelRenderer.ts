@@ -43,15 +43,17 @@ const BUILD_RADIUS = 130;
 
 // Rev 7: 2D facade wall, one signature color per building TYPE so the street
 // reads at a glance (hospital red, school blue, mosque green, …).
+// Softer, cohesive cartoon palette (matches the muted Quaternius art) — still
+// one signature hue per building TYPE but no neon.
 const TYPE_COLOR: Record<string, Color> = {
-  hospital: new Color('#ff6b6b'),
-  school: new Color('#4f8fe8'),
-  mosque: new Color('#36c98a'),
-  market: new Color('#ffae42'),
-  shop: new Color('#ffd24d'),
-  landmark: new Color('#b07cf0'),
-  commercial: new Color('#46c4d6'),
-  residential: new Color('#f4a6c0'),
+  hospital: new Color('#e08071'),
+  school: new Color('#6a93c7'),
+  mosque: new Color('#5bb98e'),
+  market: new Color('#e0a95e'),
+  shop: new Color('#d9b566'),
+  landmark: new Color('#9a86c2'),
+  commercial: new Color('#6fb1bd'),
+  residential: new Color('#d6a98f'),
 };
 
 // Facade texture style per enriched POI type (building kinds use FACADE_FOR_KIND).
@@ -138,8 +140,11 @@ export class LevelRenderer {
     }
     cx /= routePts.length;
     cz /= routePts.length;
+    // Tessellated so the world-bend curves the ground in lock-step with the
+    // finely-divided road/footpath — otherwise a 4-vertex plane stays flat and
+    // the bent road appears to float above it.
     const ground = new Mesh(
-      new PlaneGeometry(3000, 3000),
+      new PlaneGeometry(1400, 4000, 28, 240),
       new MeshLambertMaterial({ color: '#cdbc9c' }),
     );
     ground.rotation.x = -Math.PI / 2;

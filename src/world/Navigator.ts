@@ -23,6 +23,9 @@ export interface TurnBranch {
   marked: boolean;
   /** A real building/POI name a little way down this road, or undefined. */
   landmark?: string;
+  /** Estimated remaining distance to the destination if you take this road, in
+   *  metres. Filled in lazily when the turn minigame opens. */
+  distM?: number;
 }
 
 export interface DecisionPoint {

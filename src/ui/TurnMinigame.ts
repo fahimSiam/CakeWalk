@@ -72,6 +72,9 @@ export class TurnMinigame {
         `<div style="font-weight:800;font-size:13px;letter-spacing:.5px">${LABEL[b.dir]}</div>` +
         (b.landmark
           ? `<div style="font-size:12px;opacity:.78;text-align:center;line-height:1.2">${escapeHtml(b.landmark)}</div>`
+          : '') +
+        (b.distM !== undefined
+          ? `<div style="font-size:12px;font-weight:700;opacity:.92;margin-top:2px">📏 ~${Math.round(b.distM)} m</div>`
           : '');
       const pick = (e: Event): void => {
         e.preventDefault();

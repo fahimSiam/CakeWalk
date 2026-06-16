@@ -55,6 +55,7 @@ export class CrowdActors {
   private slots: Slot[] = [];
   private pose: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };
   private ready = false;
+  private disposed = false;
   // Reused scratch to avoid per-frame allocation in the render hot path.
   private candIdx: number[] = [];
   private candDist: number[] = [];
@@ -76,7 +77,7 @@ export class CrowdActors {
 
   private async load(): Promise<void> {
     const models = (await loadPeople()).filter((m): m is SkinnedModel => m !== null);
-    if (!models.length) return;
+    if (!models.length || this.disposed) return; // bailed out during the fetch
     const shadowGeo = new CircleGeometry(0.32, 10);
     shadowGeo.rotateX(-Math.PI / 2);
     const shadowMat = new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.2 });
@@ -207,6 +208,7 @@ export class CrowdActors {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.scene.remove(this.holder);
     for (const slot of this.slots) slot.mixer.stopAllAction();
     // Free only the per-slot cloned materials we own; the GLB geometry and the

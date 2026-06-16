@@ -40,7 +40,9 @@ export class CrossingMinigame {
 
   /** Opens the overlay; resolves with the outcome. */
   open(difficulty: number, playerColor: string): Promise<CrossingResult> {
-    this.lanes = Math.min(7, 2 + difficulty);
+    // Always 6 lanes — a proper Crossy-Road crossing. Difficulty still drives
+    // car speed/density below.
+    this.lanes = 6;
     this.playerColor = playerColor;
     this.px = Math.floor(COLS / 2);
     this.py = 0;
