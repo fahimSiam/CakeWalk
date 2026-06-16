@@ -52,6 +52,7 @@ import { RouteGraph } from '@/routing/RouteGraph';
 import { TurnMinigame } from '@/ui/TurnMinigame';
 import {
   OUTFIT_COLORS,
+  CHARACTER_MODELS,
   localDateKey,
   packGhost,
   unpackGhost,
@@ -338,6 +339,7 @@ export class RunState implements GameState {
       this.scene,
       OUTFIT_COLORS[save.equippedOutfit] ?? OUTFIT_COLORS.default,
       this.bendUniforms,
+      CHARACTER_MODELS[save.equippedCharacter] ?? CHARACTER_MODELS.char_man,
     );
     this.setupGhost(p);
     this.pmRenderer = new PickpocketRenderer(this.scene, this.pickpockets, this.corridor, this.bendUniforms);

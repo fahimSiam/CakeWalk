@@ -14,11 +14,38 @@ import {
   applyRunToMissions,
   buyItem,
   dailyMissions,
+  lockedCharacters,
   packGhost,
   touchStreak,
   unpackGhost,
 } from '@/meta/progression';
 import { migrate, CURRENT_VERSION } from '@/core/SaveSystem';
+
+describe('Character collection', () => {
+  it('buys, owns, and equips a character', () => {
+    const save = defaultSave();
+    save.taka = 1000;
+    expect(save.equippedCharacter).toBe('char_man');
+    expect(buyItem(save, 'char_woman')).toBe(true);
+    expect(save.ownedItems).toContain('char_woman');
+    expect(save.equippedCharacter).toBe('char_woman'); // auto-worn on buy
+    // Re-buy is refused; equipping owned is free.
+    expect(buyItem(save, 'char_woman')).toBe(false);
+  });
+
+  it('mystery box unlocks a random un-owned character, then refuses when complete', () => {
+    const save = defaultSave();
+    save.taka = 100000;
+    const total = lockedCharacters(save).length;
+    expect(total).toBeGreaterThan(0);
+    for (let i = 0; i < total; i++) {
+      expect(buyItem(save, 'mystery_box')).toBe(true);
+    }
+    expect(lockedCharacters(save).length).toBe(0);
+    // Nothing left to unlock → the box won't sell.
+    expect(buyItem(save, 'mystery_box')).toBe(false);
+  });
+});
 
 describe('Energy', () => {
   it('spends and refuses at zero', () => {

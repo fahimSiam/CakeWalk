@@ -232,8 +232,14 @@ export class MenuState implements GameState {
     const panel = this.root!.querySelector<HTMLDivElement>('#cw-panel')!;
     panel.innerHTML = `<div style="margin-top:14px;font-weight:800">Shop · ৳ ${save.taka} <span style="opacity:.5;font-size:12px">(no pay-to-win — everything earned by walking)</span></div>`;
     for (const item of SHOP_CATALOG) {
-      const owned = item.kind !== 'consumable' && save.ownedItems.includes(item.id);
-      const equipped = item.kind === 'outfit' && save.equippedOutfit === item.id;
+      const wearable = item.kind === 'outfit' || item.kind === 'character';
+      // The base "man" character is free / owned by default.
+      const owned =
+        (item.kind !== 'consumable' && save.ownedItems.includes(item.id)) || item.id === 'char_man';
+      const equipped =
+        (item.kind === 'outfit' && save.equippedOutfit === item.id) ||
+        (item.kind === 'character' && save.equippedCharacter === item.id);
+      const label = owned ? (wearable ? (equipped ? 'Worn' : 'Wear') : 'Owned') : `৳${item.price}`;
       const row = document.createElement('div');
       row.style.cssText =
         'display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:10px;' +
@@ -246,15 +252,16 @@ export class MenuState implements GameState {
         </div>
         <button style="border:none;border-radius:8px;padding:8px 12px;font-weight:800;font-family:inherit;
           background:${owned ? (equipped ? '#3fa34d' : '#555') : '#e8a33d'};color:${owned ? '#fff' : '#1a1208'}">
-          ${owned ? (item.kind === 'outfit' ? (equipped ? 'Worn' : 'Wear') : 'Owned') : `৳${item.price}`}
+          ${label}
         </button>`;
       row.querySelector('button')!.addEventListener('click', () => {
         this.ctx.save.update((d) => {
           if (item.kind === 'outfit' && d.ownedItems.includes(item.id)) d.equippedOutfit = item.id;
+          else if (item.kind === 'character' && (d.ownedItems.includes(item.id) || item.id === 'char_man'))
+            d.equippedCharacter = item.id;
           else buyItem(d, item.id);
         });
         void this.ctx.save.flush();
-        this.showShop();
         this.build(); // refresh wallet display
         this.showShop();
       });

@@ -13,6 +13,8 @@ export interface SaveData {
   unlockedAreas: string[];
   ownedItems: string[];
   equippedOutfit: string;
+  /** Shop id of the equipped character model (collection). */
+  equippedCharacter: string;
   energy: { current: number; lastRefillEpoch: number };
   streak: { lastPlayDate: string; count: number };
   missions: Record<string, number>;
@@ -35,7 +37,7 @@ export interface SaveData {
 }
 
 export const SAVE_KEY = 'cakewalk-save';
-export const CURRENT_VERSION = 1;
+export const CURRENT_VERSION = 2;
 
 export function defaultSave(): SaveData {
   return {
@@ -45,6 +47,7 @@ export function defaultSave(): SaveData {
     unlockedAreas: ['dhanmondi'],
     ownedItems: [],
     equippedOutfit: 'default',
+    equippedCharacter: 'char_man',
     energy: { current: 8, lastRefillEpoch: Date.now() },
     streak: { lastPlayDate: '', count: 0 },
     missions: {},
@@ -62,8 +65,8 @@ export function defaultSave(): SaveData {
 /** Migration from version N to N+1, keyed by N. */
 type Migration = (old: Record<string, unknown>) => Record<string, unknown>;
 const migrations: Record<number, Migration> = {
-  // 1 -> 2 example shape, added when the schema actually changes:
-  // 1: (old) => ({ ...old, version: 2, newField: defaultValue }),
+  // 1 -> 2: character collection added; default to the base "man" model.
+  1: (old) => ({ ...old, version: 2, equippedCharacter: 'char_man' }),
 };
 
 export function migrate(raw: Record<string, unknown>): SaveData {

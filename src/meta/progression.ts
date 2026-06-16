@@ -84,9 +84,18 @@ export interface ShopItem {
   nameBn: string;
   desc: string;
   price: number;
-  kind: 'powerup' | 'consumable' | 'outfit';
+  kind: 'powerup' | 'consumable' | 'outfit' | 'character';
   emoji: string;
 }
+
+/** Shop character id → Quaternius model path (the player avatar loads this). */
+export const CHARACTER_MODELS: Record<string, string> = {
+  char_man: 'characters/man',
+  char_suit: 'characters/man-suit',
+  char_woman: 'characters/woman',
+  char_woman_casual: 'characters/woman-casual',
+  char_woman_dress: 'characters/woman-dress',
+};
 
 export const SHOP_CATALOG: ShopItem[] = [
   { id: 'glasses', nameEn: 'Pocketmar Glasses', nameBn: 'পকেটমার চশমা', desc: 'Reveals pocketmars for 3 runs. Training wheels — learn the tells!', price: 150, kind: 'consumable', emoji: '🕶' },
@@ -97,6 +106,12 @@ export const SHOP_CATALOG: ShopItem[] = [
   { id: 'outfit_lungi', nameEn: 'Lungi Speedrun', nameBn: 'লুঙ্গি', desc: 'Pure style.', price: 200, kind: 'outfit', emoji: '🩳' },
   { id: 'outfit_panjabi', nameEn: 'Eid Panjabi', nameBn: 'ঈদ পাঞ্জাবি', desc: 'Festive.', price: 300, kind: 'outfit', emoji: '🥻' },
   { id: 'outfit_school', nameEn: 'School Uniform', nameBn: 'স্কুল ইউনিফর্ম', desc: 'Nostalgia.', price: 150, kind: 'outfit', emoji: '🎒' },
+  // Character collection — play as different Dhakaites (the base "man" is free).
+  { id: 'char_suit', nameEn: 'Office Bhai', nameBn: 'অফিসের ভাই', desc: 'Play as a sharp-suited commuter.', price: 500, kind: 'character', emoji: '🧑‍💼' },
+  { id: 'char_woman', nameEn: 'Apu', nameBn: 'আপু', desc: 'Play as a woman commuter.', price: 500, kind: 'character', emoji: '👩' },
+  { id: 'char_woman_casual', nameEn: 'College Apu', nameBn: 'কলেজ আপু', desc: 'Casual-style woman runner.', price: 500, kind: 'character', emoji: '👚' },
+  { id: 'char_woman_dress', nameEn: 'Eid Apu', nameBn: 'ঈদ আপু', desc: 'Festive dressed-up runner.', price: 700, kind: 'character', emoji: '👗' },
+  { id: 'mystery_box', nameEn: 'Cha-Stall Mystery Box', nameBn: 'চা-দোকান মিস্ট্রি বক্স', desc: 'Unlocks a random new character you don’t own yet.', price: 350, kind: 'consumable', emoji: '🎁' },
 ];
 
 export const OUTFIT_COLORS: Record<string, string> = {
@@ -110,10 +125,27 @@ export function buyItem(save: SaveData, id: string): boolean {
   const item = SHOP_CATALOG.find((i) => i.id === id);
   if (!item || save.taka < item.price) return false;
   if (item.kind !== 'consumable' && save.ownedItems.includes(id)) return false;
+  // Mystery box: only worth buying if there's a character left to unlock.
+  if (item.id === 'mystery_box' && lockedCharacters(save).length === 0) return false;
   save.taka -= item.price;
   if (item.id === 'glasses') save.glassesCharges += 3;
-  else save.ownedItems.push(id);
+  else if (item.id === 'mystery_box') {
+    const locked = lockedCharacters(save);
+    const pick = locked[Math.floor(Math.random() * locked.length)]!;
+    save.ownedItems.push(pick);
+    save.equippedCharacter = pick; // wear the new find right away
+  } else {
+    save.ownedItems.push(id);
+    if (item.kind === 'character') save.equippedCharacter = id;
+  }
   return true;
+}
+
+/** Buyable character ids the player doesn't own yet (excludes the free base). */
+export function lockedCharacters(save: SaveData): string[] {
+  return Object.keys(CHARACTER_MODELS).filter(
+    (id) => id !== 'char_man' && !save.ownedItems.includes(id),
+  );
 }
 
 // ---------- Ghost packing (seeded routes only) ----------

@@ -281,3 +281,10 @@
 - [x] **RunState**: advances events each tick and folds their modifiers onto the base atmosphere (player.speedMul, crowd widthAdd); dims/restores the hemisphere+sun lights by `darkness`; toasts the warning ("🌧️ Downpour!", "🔌 Load-shedding!", "🎉 Crowd surge"); disposes the FX.
 - [x] 87 unit (+3 StreetEvents: idle→warn→active progression, disabled never fires, snapshot round-trip) + 11 e2e green; screenshots verified monsoon rain/dusk and blackout darkness.
 - **2026-06-17**: M28 — per-run variety/surprise; every run can throw a downpour, blackout, or crowd surge.
+
+## M29 — Character collection (play as different Dhakaites) ✅
+- [x] The player avatar can now be ANY of the Quaternius people, unlocked & equipped like a cosmetic. New shop kind `'character'` + items: Office Bhai (man-suit), Apu (woman), College Apu (woman-casual), Eid Apu (woman-dress); the base "man" is free. Plus a **🎁 Cha-Stall Mystery Box** consumable that unlocks a random un-owned character and wears it.
+- [x] **SaveData.equippedCharacter** added (default `char_man`); schema bumped to v2 with a 1→2 migration. **CHARACTER_MODELS** maps shop id → Quaternius model path; `buyItem` auto-equips a bought/boxed character; `lockedCharacters()` gates the mystery box. PlayerAvatar takes a model-path arg; RunState passes the equipped one.
+- [x] MenuState shop renders character rows with Wear/Worn (same UX as outfits).
+- [x] 89 unit (+2 collection: buy/own/equip + auto-wear, mystery box unlock-until-complete; migration v2 covered) + 11 e2e green; screenshot verified playing as the Eid Apu (red dress) matching the crowd style.
+- **2026-06-17**: M29 — identity/collection retention hook; pick who you run as.

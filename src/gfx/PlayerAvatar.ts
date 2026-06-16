@@ -81,7 +81,12 @@ export class PlayerAvatar {
    *  (geometry + the source's materials belong to the shared cache). */
   private owned: MeshStandardMaterial[] = [];
 
-  constructor(scene: Scene, outfitColor = '#e8a33d', bend?: BendUniforms) {
+  constructor(
+    scene: Scene,
+    outfitColor = '#e8a33d',
+    bend?: BendUniforms,
+    private modelPath: string = PLAYER_MODEL,
+  ) {
     this.accent = new Color(outfitColor);
     this.bend = bend;
     this.group.add(this.holder);
@@ -106,7 +111,7 @@ export class PlayerAvatar {
   }
 
   private async loadRig(): Promise<void> {
-    const model = await loadCharacterModel(PLAYER_MODEL);
+    const model = await loadCharacterModel(this.modelPath);
     if (!model) return; // keep the procedural fallback
     const { root } = model.spawn(AVATAR_HEIGHT);
 
