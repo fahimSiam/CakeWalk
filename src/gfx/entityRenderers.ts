@@ -105,20 +105,16 @@ export class TrafficRenderer {
       this.kindMeshes[ki] = mesh;
       this.kindScale[ki] = scale;
 
-      // Real models: Kenney truck/bike (single-texture) for bus/bike; Poly
-      // Pizza Quaternius cars (flat multi-material → vertex-coloured) for cars.
+      // Poly Pizza Quaternius cars (flat multi-material → vertex-coloured).
+      // CNG + rickshaw stay procedural.
       const CAR_GLB: Record<string, string> = {
         car: 'cars/car-1',
         taxi: 'cars/taxi',
         suv: 'cars/suv',
       };
-      const modelName =
-        kind.id === 'bus' ? 'vehicle-truck-red'
-        : kind.id === 'bike' ? 'vehicle-motorcycle'
-        : (CAR_GLB[kind.id] ?? null);
-      const flatColors = kind.id in CAR_GLB;
+      const modelName = CAR_GLB[kind.id] ?? null;
       if (modelName) {
-        void loadVehicleModel(modelName, flatColors).then((model) => {
+        void loadVehicleModel(modelName, true).then((model) => {
           if (!model || this.disposed) return;
           mesh.geometry.dispose();
           (mesh.material as MeshLambertMaterial).dispose();

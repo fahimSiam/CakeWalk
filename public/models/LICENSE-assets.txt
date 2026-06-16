@@ -23,4 +23,5 @@ nature/      — Quaternius (https://poly.pizza/u/Quaternius)
 street/      — Quaternius (https://poly.pizza/u/Quaternius)
   street-straight, street-light
 
-vehicle-*.glb / Textures/ — Kenney "Car Kit" (MIT), see LICENSE-kenney.txt
+Only cars/car-1, cars/taxi, cars/suv are wired into traffic today (plus the
+procedural CNG + rickshaw); the other car GLBs are kept for future variety.

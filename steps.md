@@ -254,3 +254,9 @@
 - [x] Merged per FacadeStyle (walls) + one details mesh (roofs+tanks) → ~5 draw calls, ~7k tris for the whole building set. Reviewer pass: fixed a 90° roof-slab rotation (footprint was swapped) and stopped `dispose()` from freeing the module-cached facade window texture (tagged `userData.sharedMap`); per-instance signboard textures still freed.
 - [x] 83 unit + 11 e2e green; screenshots across Dhanmondi/Gulistan/Puran Dhaka show solid, colourful, dimensional buildings with windows + water tanks.
 - **2026-06-16**: M24 — buildings now look like real 3D buildings; the street is eye-catching.
+
+## M25 — Remove previous-artstyle (Kenney) vehicles ✅
+- [x] Dropped the `bus` (Kenney truck, length 9 — oversized) and `bike` (Kenney motorcycle) vehicle kinds: they were a different art style from the cohesive Quaternius cars and the truck looked huge. Traffic is now CNG + rickshaw (procedural Dhaka three-wheelers) + car/taxi/suv (Quaternius GLBs); spawn weights updated.
+- [x] Removed the now-unused Kenney GLBs (vehicle-truck-red/green/yellow, vehicle-motorcycle), Textures/colormap.png and LICENSE-kenney.txt; updated LICENSE-assets.txt.
+- [x] 83 unit + 11 e2e green; screenshot confirms only cohesive cars on the road, no big truck.
+- **2026-06-16**: M25 — vehicle fleet is now fully on the cohesive art style.
