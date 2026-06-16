@@ -266,3 +266,11 @@
 - [x] **Crowd carries loads again** (gone since the GLB swap): two instanced prop meshes on the matching archetypes — cardboard **boxes on the head** for `headLoadCarrier` (dip/duck under, HIGH band) and a **crate at the feet** for `luggageDragger` (jump over). luggageDragger's band changed FULL→LOW so it's a real jump obstacle. Props are Quaternius GLBs (props/boxes, props/crate) fetched via tools/assets/fetch.mjs, flattened+instanced, world-bent, and disposed with the pool.
 - [x] 83 unit + 11 e2e green; screenshots verified natural shoulder dip + forward duck, and head-boxes / ground-crates on carriers.
 - **2026-06-17**: M26 — readability + the duck/jump obstacle loop is visible again.
+
+## M27 — Game juice: near-miss feedback + combo heat + flow-state ✅
+- [x] **gfx/JuiceFx.ts** (NEW): the moment-to-moment dopamine layer. On every near-miss → camera punch-in (FOV kick) + shake, a white radial speed-line flash, a haptic blip (navigator.vibrate), and a bump to a "heat" meter. Sustained grazes fill heat → **FLOW state** (~4.2s): a slow-mo burst on entry, a golden vignette + "FLOW! 2×" banner, and doubled taka; heat decays when you stop grazing. Knockout = red freeze-flash + slow-mo + strong buzz.
+- [x] Slow-mo drives the shared loop time-scale but only WHILE JuiceFx owns an active slow-mo (restores to 1 once on exit), so it never fights minigame/test freezes.
+- [x] **HUD combo** now ramps: 🔥 count grows with streak, text scales up and glows hotter (white→gold) — visible reward for not getting hit.
+- [x] **RunScore.flowActive** doubles the multiplier (alongside the Cakewalk meter); wired from JuiceFx each frame.
+- [x] 84 unit (+1 flow multiplier) + 11 e2e green; screenshot verified flow vignette + banner + 🔥🔥🔥 x12 combo.
+- **2026-06-17**: M27 — the core "one more run" feel; near-misses are now a moment, hot streaks feel powerful.

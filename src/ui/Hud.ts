@@ -220,7 +220,19 @@ export class Hud {
     this.staminaFill.style.width = `${stamina}%`;
     this.meterFill.style.width = `${meter * 100}%`;
     this.takaEl.textContent = `৳ ${taka}`;
-    this.comboEl.textContent = combo > 1 ? `x${combo} combo` : '';
+    // Hotter streaks get more flame + grow + glow (the dopamine ramp).
+    if (combo > 1) {
+      const fires = '🔥'.repeat(Math.min(3, 1 + Math.floor(combo / 5)));
+      this.comboEl.textContent = `${fires} x${combo}`;
+      const heat = Math.min(1, combo / 15);
+      this.comboEl.style.transform = `scale(${1 + heat * 0.4})`;
+      this.comboEl.style.color = heat > 0.6 ? '#ffd24d' : '#fff';
+      this.comboEl.style.textShadow = `0 0 ${4 + heat * 14}px rgba(255,${Math.round(180 - heat * 120)},60,${0.4 + heat * 0.5})`;
+    } else {
+      this.comboEl.textContent = '';
+      this.comboEl.style.transform = 'scale(1)';
+      this.comboEl.style.textShadow = 'none';
+    }
   }
 
   toast(msg: string, frameDt: number): void {

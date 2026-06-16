@@ -20,6 +20,8 @@ export class RunScore {
   /** >1 with Headphones (meter fills faster). */
   meterGainMul = 1;
   meterActive = 0; // seconds remaining of doubled points
+  /** Set by JuiceFx while the player is in flow-state — doubles taka. */
+  flowActive = false;
   stolenTotal = 0;
   nearMisses = 0;
   bestCombo = 0;
@@ -37,7 +39,8 @@ export class RunScore {
 
   get multiplier(): number {
     const comboMult = Math.min(1 + this.combo * COMBO_STEP, COMBO_MAX_MULT);
-    return this.meterActive > 0 ? comboMult * 2 : comboMult;
+    const doubled = this.meterActive > 0 || this.flowActive;
+    return doubled ? comboMult * 2 : comboMult;
   }
 
   fixedUpdate(dt: number): void {

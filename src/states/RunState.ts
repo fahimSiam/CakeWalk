@@ -40,6 +40,7 @@ import { PickpocketRenderer } from '@/gfx/PickpocketActors';
 import { PhoneOverlay } from '@/ui/PhoneOverlay';
 import { RewindBuffer, SandWatch, type Snapshottable } from '@/items/SandWatch';
 import { RewindFx } from '@/gfx/RewindFx';
+import { JuiceFx } from '@/gfx/JuiceFx';
 import { RestMarker } from '@/gfx/RestMarker';
 import { CrossingMinigame } from '@/ui/CrossingMinigame';
 import { bendObject, makeBendUniforms, type BendUniforms } from '@/gfx/worldBend';
@@ -137,6 +138,7 @@ export class RunState implements GameState {
   private phoneOverlay!: PhoneOverlay;
   private sandWatch!: SandWatch;
   private rewindFx!: RewindFx;
+  private juice!: JuiceFx;
   private elapsed = 0;
   private summary: RunSummary = {
     chaCups: 0,
@@ -333,6 +335,7 @@ export class RunState implements GameState {
     this.hud = new Hud(this.ctx.input);
     this.phoneOverlay = new PhoneOverlay();
     this.rewindFx = new RewindFx(this.ctx.renderer.domElement);
+    this.juice = new JuiceFx(this.ctx.renderer.domElement, this.bus, this.ctx.loopTimeScale);
 
     // Curved-world bend: straight under the player, road falls away in the
     // distance. Patches every mesh material now that the scene is fully built.
@@ -693,6 +696,7 @@ export class RunState implements GameState {
     this.hud.dispose();
     this.phoneOverlay.dispose();
     this.rewindFx.dispose();
+    this.juice.dispose();
     this.avatar.dispose(this.scene);
     this.crowdActors.dispose();
     this.pmRenderer.dispose(this.scene);
@@ -818,6 +822,7 @@ export class RunState implements GameState {
 
     if (this.player.s >= this.runLength) this.finish(true);
     else if (this.player.health <= 0) {
+      this.juice.knockout();
       if (!this.reviveUsed && !this.params.daily) this.offerRevive();
       else this.finish(false);
     }
@@ -953,6 +958,9 @@ export class RunState implements GameState {
       this.camInit = true;
     }
     cam.lookAt(this.camLook.x, 1.1, this.camLook.z);
+    // Near-miss camera punch + shake on top of the chase framing.
+    this.juice.applyCamera(cam);
+    this.score.flowActive = this.juice.flowing;
 
     // Crowd = animated Quaternius people (same art style as the player), pooled
     // onto the agents nearest the camera.
@@ -1002,6 +1010,7 @@ export class RunState implements GameState {
     );
     this.hud.setSandWatch(this.sandWatch.owned, this.sandWatch.charge, this.sandWatch.canActivate);
     this.rewindFx.frame(frameDt);
+    this.juice.frame(frameDt);
     this.atmosphereHandle.frame(frameDt);
     if (this.player.phoneLocked && this.params.area && this.params.route && this.projector) {
       const rp: PathPose = { x: 0, z: 0, dirX: 0, dirZ: -1 };

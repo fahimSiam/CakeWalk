@@ -21,6 +21,18 @@ function setup(seed = 1) {
   return { bus, rng, player, score };
 }
 
+describe('RunScore flow-state', () => {
+  it('flowActive doubles the score multiplier', () => {
+    const { score } = setup();
+    score.combo = 4;
+    const base = score.multiplier;
+    score.flowActive = true;
+    expect(score.multiplier).toBeCloseTo(base * 2, 5);
+    score.flowActive = false;
+    expect(score.multiplier).toBeCloseTo(base, 5);
+  });
+});
+
 describe('PickpocketSystem', () => {
   it('a striking pocketmar steals taka', () => {
     const { bus, rng, player, score } = setup();
